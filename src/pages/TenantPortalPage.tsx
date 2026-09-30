@@ -26,7 +26,7 @@ export const TenantPortalPage: React.FC = () => {
       setTenant(tFound);
       setHalls(cinemaStore.getHalls(tFound.id));
       setScreens(cinemaStore.getScreens().filter((s) => s.tenantId === tFound.id));
-      setMovies(cinemaStore.getMovies());
+      setMovies(cinemaStore.getMovies().filter((m) => m.published !== false));
       setShowtimes(cinemaStore.getShowtimes(tFound.id));
     }
     setLoading(false);

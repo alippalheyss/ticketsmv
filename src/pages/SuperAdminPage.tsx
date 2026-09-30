@@ -214,40 +214,35 @@ export const SuperAdminPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-6 border-b border-slate-800">
-        <div className="flex items-center space-x-3">
-          <div className="p-3 rounded-2xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
-            <Shield className="w-7 h-7" />
+      {/* Minimal Top Header */}
+      <div className="flex items-center justify-between pb-4 border-b border-slate-800">
+        <div className="flex items-center space-x-2.5">
+          <div className="p-2 rounded-xl bg-purple-500/10 text-purple-400 border border-purple-500/20">
+            <Shield className="w-5 h-5" />
           </div>
           <div>
-            <div className="flex items-center space-x-2">
-              <h1 className="text-2xl font-bold text-white">Super Admin Control Hub</h1>
-              <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-purple-500/20 text-purple-300 border border-purple-500/30">
-                Weekly • Monthly • One-Month Subscriptions
-              </span>
-            </div>
-            <p className="text-xs text-slate-400 mt-1">
-              Manage cinema subscriptions: Weekly, Monthly, or One Month Only. Zero commission fees are charged to admins or tenants.
-            </p>
+            <h1 className="text-lg sm:text-xl font-bold text-white">Super Admin</h1>
+            <p className="text-[11px] text-slate-400">Tickets.mv Network Control Hub</p>
           </div>
         </div>
 
-        <div className="flex items-center space-x-3">
+        <div className="flex items-center space-x-2">
           <button
             onClick={loadData}
-            className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition border border-slate-700"
+            className="flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition border border-slate-700"
+            title="Sync Data"
           >
             <RefreshCw className="w-3.5 h-3.5" />
-            <span>Sync</span>
+            <span className="hidden sm:inline">Sync</span>
           </button>
 
           <button
             onClick={handleAdminLogout}
-            className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold transition"
+            className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold transition"
+            title="Sign out of Super Admin"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>Sign Out</span>
+            <span className="hidden sm:inline">Sign Out</span>
           </button>
         </div>
       </div>
@@ -382,7 +377,160 @@ export const SuperAdminPage: React.FC = () => {
           </div>
         </div>
 
-        <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
+        {/* MOBILE VIEW (CARDS) - ZERO HORIZONTAL SCROLL */}
+        <div className="block lg:hidden space-y-4">
+          {tenants.map((tenant) => {
+            const isActive = tenant.status === 'active';
+
+            return (
+              <div key={tenant.id} className="glass-panel rounded-2xl p-4 border border-slate-800 space-y-3 shadow-lg">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2.5">
+                    <img
+                      src={tenant.branding.logoUrl}
+                      alt={tenant.name}
+                      className="w-10 h-10 rounded-xl object-cover border border-slate-700 shrink-0"
+                    />
+                    <div>
+                      <h3 className="font-bold text-white text-sm">{tenant.name}</h3>
+                      <p className="text-[11px] text-slate-400 font-mono">{tenant.ownerEmail}</p>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col items-end space-y-1">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                      {tenant.tenantCode || 'ORG'}
+                    </span>
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold capitalize ${
+                        isActive
+                          ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/40'
+                          : 'bg-rose-500/20 text-rose-400 border border-rose-500/40'
+                      }`}
+                    >
+                      {tenant.status}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 p-2.5 rounded-xl bg-slate-900/80 border border-slate-800 text-xs">
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Location:</span>
+                    <span className="font-semibold text-slate-200">{tenant.branding.island}, {tenant.branding.atoll}</span>
+                  </div>
+                  <div>
+                    <span className="text-[10px] text-slate-400 block">Portal URL:</span>
+                    <a
+                      href={`/t/${tenant.slug}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-mono text-teal-400 hover:underline font-semibold"
+                    >
+                      /t/{tenant.slug} ↗
+                    </a>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="text-slate-400">Current Plan:</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${
+                      tenant.tier === 'free' || tenant.subscriptionModel === 'free_trial'
+                        ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
+                        : 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
+                    }`}>
+                      {tenant.subscriptionModel === 'weekly' ? 'Weekly (MVR 149/wk)' :
+                       tenant.subscriptionModel === 'one_month' ? 'One Month Only (MVR 550)' :
+                       tenant.subscriptionModel === 'monthly' ? 'Monthly (MVR 499/mo)' :
+                       'Free Plan (MVR 0)'}
+                    </span>
+                  </div>
+                  {tenant.subscriptionBillingDate && (
+                    <p className="text-[10px] font-mono text-right text-slate-400">
+                      {new Date(tenant.subscriptionBillingDate).getTime() < Date.now()
+                        ? <span className="text-rose-400 font-bold">Expired • Fallen back to Free</span>
+                        : `Expires: ${new Date(tenant.subscriptionBillingDate).toLocaleDateString()}`}
+                    </p>
+                  )}
+                </div>
+
+                {/* Plan switcher and actions */}
+                <div className="pt-2 border-t border-slate-800 space-y-2">
+                  <span className="text-[11px] font-bold text-slate-400 block">Switch Subscription:</span>
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-1.5">
+                    <button
+                      onClick={() => handleSetSubscription(tenant, 'free_trial')}
+                      className={`px-2 py-1.5 rounded-lg text-[10px] font-bold border transition text-center ${
+                        tenant.subscriptionModel === 'free_trial' || tenant.tier === 'free'
+                          ? 'bg-amber-500 text-slate-950 border-amber-400 font-extrabold shadow-sm'
+                          : 'bg-slate-900 text-amber-300/80 border-slate-800 hover:bg-slate-800'
+                      }`}
+                    >
+                      Free (0)
+                    </button>
+                    <button
+                      onClick={() => handleSetSubscription(tenant, 'weekly')}
+                      className={`px-2 py-1.5 rounded-lg text-[10px] font-bold border transition text-center ${
+                        tenant.subscriptionModel === 'weekly'
+                          ? 'bg-teal-500 text-slate-950 border-teal-400 font-extrabold shadow-sm'
+                          : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
+                      }`}
+                    >
+                      Weekly (149)
+                    </button>
+                    <button
+                      onClick={() => handleSetSubscription(tenant, 'monthly')}
+                      className={`px-2 py-1.5 rounded-lg text-[10px] font-bold border transition text-center ${
+                        tenant.subscriptionModel === 'monthly'
+                          ? 'bg-teal-500 text-slate-950 border-teal-400 font-extrabold shadow-sm'
+                          : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
+                      }`}
+                    >
+                      Monthly (499)
+                    </button>
+                    <button
+                      onClick={() => handleSetSubscription(tenant, 'one_month')}
+                      className={`px-2 py-1.5 rounded-lg text-[10px] font-bold border transition text-center ${
+                        tenant.subscriptionModel === 'one_month'
+                          ? 'bg-teal-500 text-slate-950 border-teal-400 font-extrabold shadow-sm'
+                          : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
+                      }`}
+                    >
+                      1-Month (550)
+                    </button>
+                  </div>
+
+                  <div className="flex items-center space-x-2 pt-1">
+                    {tenant.tier === 'paid' && (
+                      <button
+                        onClick={() => {
+                          cinemaStore.expireTenantNow(tenant.id);
+                          loadData();
+                        }}
+                        className="flex-1 py-1.5 rounded-lg text-[10px] font-bold bg-rose-500/10 text-rose-300 border border-rose-500/30 hover:bg-rose-500/20 transition text-center"
+                      >
+                        ⚡ Expire (Fallback)
+                      </button>
+                    )}
+                    <button
+                      onClick={() => handleToggleStatus(tenant)}
+                      className={`flex-1 py-1.5 rounded-lg text-[10px] font-bold transition text-center ${
+                        isActive
+                          ? 'bg-amber-500/10 hover:bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                          : 'bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                      }`}
+                    >
+                      {isActive ? 'Suspend' : 'Activate'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        {/* DESKTOP VIEW (TABLE) */}
+        <div className="hidden lg:block glass-panel rounded-2xl border border-slate-800 overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs text-slate-300">
               <thead className="bg-slate-900/90 text-slate-400 font-semibold uppercase tracking-wider text-[11px] border-b border-slate-800">

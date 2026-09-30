@@ -255,7 +255,8 @@ const INITIAL_MOVIES: Movie[] = [
     trailerYoutubeUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     cast: ['Yoosuf Shafeeu', 'Mariyam Azza', 'Mohamed Manik', 'Aminath Rishfa'],
     genre: ['Drama', 'Romance', 'Mystery'],
-    releaseDate: '2026-08-15'
+    releaseDate: '2026-08-15',
+    published: true
   },
   {
     id: 'movie-2',
@@ -270,7 +271,8 @@ const INITIAL_MOVIES: Movie[] = [
     trailerYoutubeUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     cast: ['Ali Seezan', 'Niuma Mohamed', 'Jumayyil Nimal'],
     genre: ['Thriller', 'Crime', 'Folklore'],
-    releaseDate: '2026-09-01'
+    releaseDate: '2026-09-01',
+    published: true
   },
   {
     id: 'movie-3',
@@ -285,7 +287,8 @@ const INITIAL_MOVIES: Movie[] = [
     trailerYoutubeUrl: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
     cast: ['Ahmed Easa', 'Fathimath Fareela', 'Ravee Farooq'],
     genre: ['Musical', 'Comedy', 'Family'],
-    releaseDate: '2026-09-20'
+    releaseDate: '2026-09-20',
+    published: true
   }
 ];
 
@@ -721,6 +724,24 @@ class MaldivianCinemaStore {
     localStorage.setItem(STORAGE_KEYS.SHOWTIMES, JSON.stringify(showtimes));
 
     this.broadcastSync();
+  }
+
+  public toggleMoviePublish(movieId: string): boolean {
+    const list = this.getMovies();
+    const movie = list.find((m) => m.id === movieId);
+    if (!movie) return false;
+    movie.published = movie.published === false ? true : false;
+    localStorage.setItem(STORAGE_KEYS.MOVIES, JSON.stringify(list));
+    this.addLog({
+      id: `log-${Date.now()}`,
+      type: 'tenant',
+      tenantId: movie.tenantId,
+      message: `Movie "${movie.titleEn}" status changed to ${movie.published ? 'Live / Published' : 'Private / Draft'}`,
+      status: 'info',
+      timestamp: new Date().toISOString()
+    });
+    this.broadcastSync();
+    return movie.published;
   }
 
   // --- SHOWTIMES (WITH CANCEL AND DELETE OPTIONS) ---

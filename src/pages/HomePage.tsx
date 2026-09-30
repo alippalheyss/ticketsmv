@@ -7,8 +7,9 @@ import {
   Film, Sparkles, MapPin, Calendar, Clock, Ticket, Search, 
   Play, Shield, Star, ChevronRight, Building2, Phone, Mail, 
   MessageCircle, CheckCircle2, ArrowRight, Send, Plus, KeyRound, Check, X,
-  Compass, Globe
+  Compass, Globe, ChevronDown
 } from 'lucide-react';
+import { getYouTubeEmbedUrl, getDirectYouTubeWatchUrl } from '../lib/youtube';
 
 export const HomePage: React.FC = () => {
   const { t, formatCurrency, isDhivehi } = useLanguage();
@@ -92,6 +93,9 @@ export const HomePage: React.FC = () => {
 
   // Filtered movies based on Search, Atoll, and Island
   const filteredMovies = movies.filter((movie) => {
+    // Only show published movies to the public (draft/private stay in tenant admin)
+    if (movie.published === false) return false;
+
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       const matchTitleEn = movie.titleEn.toLowerCase().includes(q);
@@ -239,36 +243,38 @@ export const HomePage: React.FC = () => {
 
               {/* 1. Atoll Selector Dropdown */}
               <div className="relative w-full sm:w-auto">
-                <Compass className="w-4 h-4 text-teal-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <Compass className="w-4 h-4 text-teal-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
                 <select
                   value={selectedAtoll}
                   onChange={(e) => handleAtollChange(e.target.value)}
-                  className="w-full sm:w-auto pl-9 pr-4 py-2 rounded-xl bg-slate-800 text-xs font-bold text-teal-300 border border-slate-700 focus:outline-none focus:border-teal-400 cursor-pointer"
+                  className="w-full sm:w-auto appearance-none pl-9 pr-9 py-2.5 rounded-xl bg-slate-900/90 text-xs font-bold text-teal-300 border border-slate-700/80 shadow-inner focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400 cursor-pointer transition hover:border-slate-600"
                 >
-                  <option value="all">All Atolls (ހުރިހާ އަތޮޅު)</option>
+                  <option value="all" className="bg-slate-900 text-slate-200">All Atolls (ހުރިހާ އަތޮޅު)</option>
                   {atolls.map((atoll) => (
-                    <option key={atoll} value={atoll}>
+                    <option key={atoll} value={atoll} className="bg-slate-900 text-slate-200">
                       {atoll}
                     </option>
                   ))}
                 </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
 
               {/* 2. Island Selector Dropdown */}
               <div className="relative w-full sm:w-auto">
-                <MapPin className="w-4 h-4 text-cyan-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <MapPin className="w-4 h-4 text-cyan-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
                 <select
                   value={selectedIsland}
                   onChange={(e) => setSelectedIsland(e.target.value)}
-                  className="w-full sm:w-auto pl-9 pr-4 py-2 rounded-xl bg-slate-800 text-xs font-bold text-cyan-300 border border-slate-700 focus:outline-none focus:border-teal-400 cursor-pointer"
+                  className="w-full sm:w-auto appearance-none pl-9 pr-9 py-2.5 rounded-xl bg-slate-900/90 text-xs font-bold text-cyan-300 border border-slate-700/80 shadow-inner focus:outline-none focus:ring-1 focus:ring-cyan-400 focus:border-cyan-400 cursor-pointer transition hover:border-slate-600"
                 >
-                  <option value="all">All Islands (ހުރިހާ ރަށް)</option>
+                  <option value="all" className="bg-slate-900 text-slate-200">All Islands (ހުރިހާ ރަށް)</option>
                   {availableIslands.map((isle) => (
-                    <option key={isle} value={isle}>
+                    <option key={isle} value={isle} className="bg-slate-900 text-slate-200">
                       {isle}
                     </option>
                   ))}
                 </select>
+                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
             </div>
 
@@ -602,24 +608,13 @@ export const HomePage: React.FC = () => {
               </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
-              <button
-                type="button"
-                onClick={() => {
-                  setSubmittedReq(null);
-                  setShowOnboardingModal(true);
-                }}
-                className="px-5 py-3 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-400 hover:from-teal-400 hover:to-cyan-300 text-slate-950 font-bold text-xs text-center shadow-lg shadow-teal-500/25 transition active:scale-95 flex items-center justify-center space-x-1.5"
-              >
-                <Plus className="w-4 h-4" />
-                <span>Join as Organizer</span>
-              </button>
-
+            <div className="flex items-center gap-3 shrink-0">
               <Link
                 to="/admin"
-                className="px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs text-center border border-slate-700 transition"
+                className="px-6 py-3.5 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-400 hover:from-teal-400 hover:to-cyan-300 text-slate-950 font-black text-xs text-center shadow-lg shadow-teal-500/25 transition active:scale-95 flex items-center justify-center space-x-2"
               >
-                Organizer Sign In
+                <Sparkles className="w-4 h-4" />
+                <span>Join as Organizer →</span>
               </Link>
             </div>
           </div>
@@ -888,27 +883,42 @@ export const HomePage: React.FC = () => {
 
       {/* Trailer Modal */}
       {selectedMovieForTrailer && (
-        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-md">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-4 space-y-3">
-            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
-              <h3 className="font-bold text-white text-base">
-                {selectedMovieForTrailer.titleEn} ({selectedMovieForTrailer.titleDv}) - Official Trailer
-              </h3>
+        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 backdrop-blur-md animate-fadeIn">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-3xl w-full p-4 sm:p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center space-x-2">
+                <Play className="w-4 h-4 text-rose-500 fill-rose-500" />
+                <h3 className="font-bold text-white text-sm sm:text-base">
+                  {selectedMovieForTrailer.titleEn} ({selectedMovieForTrailer.titleDv}) - Official Trailer
+                </h3>
+              </div>
               <button
                 onClick={() => setSelectedMovieForTrailer(null)}
-                className="text-slate-400 hover:text-white p-1"
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center text-sm transition"
               >
                 ✕
               </button>
             </div>
-            <div className="aspect-video bg-black rounded-xl overflow-hidden">
+            <div className="aspect-video bg-black rounded-2xl overflow-hidden border border-slate-800 shadow-inner">
               <iframe
-                src={`https://www.youtube.com/embed/${selectedMovieForTrailer.trailerYoutubeUrl.split('v=')[1] || 'dQw4w9WgXcQ'}?autoplay=1`}
-                title="Trailer"
+                src={getYouTubeEmbedUrl(selectedMovieForTrailer.trailerYoutubeUrl)}
+                title={`${selectedMovieForTrailer.titleEn} Trailer`}
                 className="w-full h-full"
-                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                 allowFullScreen
               />
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 text-xs text-slate-400">
+              <span>Having trouble with embedded video playback?</span>
+              <a
+                href={getDirectYouTubeWatchUrl(selectedMovieForTrailer.trailerYoutubeUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-teal-400 hover:text-teal-300 font-bold underline flex items-center space-x-1"
+              >
+                <span>Watch Directly on YouTube</span>
+                <span>↗</span>
+              </a>
             </div>
           </div>
         </div>

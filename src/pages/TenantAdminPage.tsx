@@ -107,8 +107,9 @@ export const TenantAdminPage: React.FC = () => {
     ageRating: 'PG-13',
     trailerYoutubeUrl: '',
     cast: [],
-    genre: ['Drama'],
-    releaseDate: new Date().toISOString().split('T')[0]
+    genre: [],
+    releaseDate: new Date().toISOString().split('T')[0],
+    published: true
   });
 
   const refreshData = () => {
@@ -239,9 +240,10 @@ export const TenantAdminPage: React.FC = () => {
         durationMinutes: 120,
         ageRating: 'PG-13',
         trailerYoutubeUrl: '',
-        cast: ['Yoosuf Shafeeu', 'Mariyam Azza'],
-        genre: ['Drama', 'Romance'],
-        releaseDate: new Date().toISOString().split('T')[0]
+        cast: [],
+        genre: [],
+        releaseDate: new Date().toISOString().split('T')[0],
+        published: true
       });
     }
     setShowMovieEditModal(true);
@@ -631,46 +633,35 @@ export const TenantAdminPage: React.FC = () => {
 
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
-      {/* Top Header & Tenant Selector */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-slate-800">
-        <div>
-          <div className="flex items-center space-x-3">
-            <div className="p-2.5 rounded-xl bg-teal-500/10 text-teal-400 border border-teal-500/20">
-              <Building2 className="w-6 h-6" />
+      {/* Sleek Minimalist Top Header (Mobile-Optimized) */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-800">
+        <div className="flex items-center space-x-3">
+          <div className="p-2 rounded-xl bg-teal-500/10 text-teal-400 border border-teal-500/20 shrink-0">
+            <Building2 className="w-5 h-5" />
+          </div>
+          <div className="min-w-0">
+            <div className="flex items-center space-x-2">
+              <h1 className="text-lg sm:text-xl font-bold text-white truncate">{currentTenant.name}</h1>
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-amber-500/20 text-amber-300 border border-amber-500/40 shrink-0">
+                {currentTenant.tenantCode || 'OLY-01'}
+              </span>
             </div>
-            <div>
-              <div className="flex flex-wrap items-center gap-2">
-                <h1 className="text-2xl font-bold text-white">{currentTenant.name}</h1>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-mono font-bold uppercase tracking-wider bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-sm" title="Unique Tenant Recognition Code">
-                  Code: {currentTenant.tenantCode || 'OLY-01'}
-                </span>
-                <span className="px-2.5 py-0.5 rounded-full text-xs font-bold uppercase tracking-wider bg-teal-500/20 text-teal-300 border border-teal-500/40">
-                  {currentTenant.subscriptionModel === 'weekly' ? 'Weekly (MVR 149/wk)' :
-                   currentTenant.subscriptionModel === 'one_month' ? 'One Month Only (MVR 550)' :
-                   currentTenant.subscriptionModel === 'monthly' ? 'Monthly (MVR 499/mo)' :
-                   'Free Trial'}
-                </span>
-              </div>
-              <p className="text-xs text-slate-400 flex items-center space-x-1.5 mt-0.5">
-                <MapPin className="w-3.5 h-3.5 text-teal-400" />
-                <span>{currentTenant.branding.island}, {currentTenant.branding.atoll}</span>
-                <span>•</span>
-                <span className="text-emerald-400 font-semibold">100% Ticket Sales Kept by Cinema (Zero Commission)</span>
-              </p>
-            </div>
+            <p className="text-[11px] text-slate-400">
+              {currentTenant.branding.island}, {currentTenant.branding.atoll}
+            </p>
           </div>
         </div>
 
-        {/* Switch Tenant Account & View Public Portal */}
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex items-center space-x-2 self-end sm:self-auto shrink-0">
           <select
             value={selectedTenantId}
             onChange={(e) => setSelectedTenantId(e.target.value)}
-            className="px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-teal-400 font-mono"
+            className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-teal-400 font-mono"
+            title="Switch Cinema Account"
           >
             {tenants.map((t) => (
               <option key={t.id} value={t.id}>
-                {t.tenantCode || 'ORG'} • {t.name} ({t.branding.island})
+                {t.tenantCode || 'ORG'} • {t.name}
               </option>
             ))}
           </select>
@@ -678,117 +669,22 @@ export const TenantAdminPage: React.FC = () => {
           <Link
             to={`/t/${currentTenant.slug}`}
             target="_blank"
-            className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/40 text-xs font-semibold transition"
+            className="flex items-center space-x-1 px-3 py-1.5 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 border border-teal-500/30 text-xs font-semibold transition"
           >
             <ExternalLink className="w-3.5 h-3.5" />
-            <span>Open Public Portal</span>
+            <span className="hidden sm:inline">Portal</span>
           </Link>
 
           <button
             onClick={handleTenantLogout}
-            className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold transition"
+            className="flex items-center space-x-1 px-2.5 py-1.5 rounded-xl bg-rose-500/10 hover:bg-rose-500/20 text-rose-300 border border-rose-500/30 text-xs font-bold transition"
             title="Sign out of Cinema Portal"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>Sign Out</span>
+            <span className="hidden sm:inline">Sign Out</span>
           </button>
         </div>
       </div>
-
-      {/* Subscription Model Quick Bar */}
-      <div className="p-4 rounded-2xl bg-slate-900 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-        <div>
-          <span className="text-[10px] uppercase font-bold text-slate-400 block">Current SaaS Plan:</span>
-          <p className="text-sm font-bold text-white">
-            {currentTenant.subscriptionModel === 'weekly' ? 'Weekly Plan (MVR 149 / week)' :
-             currentTenant.subscriptionModel === 'one_month' ? 'One Month Only (MVR 550 single month pass)' :
-             currentTenant.subscriptionModel === 'monthly' ? 'Monthly Plan (MVR 499 / month recurring)' :
-             'Free Plan (Free Tier / Fallback)'}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-xs text-slate-400 font-semibold mr-1">Switch Plan:</span>
-          <button
-            onClick={() => handleSwitchSubscription('free_trial')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
-              currentTenant.subscriptionModel === 'free_trial' || currentTenant.tier === 'free'
-                ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
-                : 'bg-slate-800 text-amber-300/80 border-slate-700 hover:bg-slate-700'
-            }`}
-            title="Downgrade to Free Tier (Restricts Pro Features)"
-          >
-            Free Plan (0)
-          </button>
-          <button
-            onClick={() => handleSwitchSubscription('weekly')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
-              currentTenant.subscriptionModel === 'weekly'
-                ? 'bg-teal-500 text-slate-950 border-teal-400 shadow-sm'
-                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-            }`}
-          >
-            Weekly (MVR 149/wk)
-          </button>
-          <button
-            onClick={() => handleSwitchSubscription('monthly')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
-              currentTenant.subscriptionModel === 'monthly'
-                ? 'bg-teal-500 text-slate-950 border-teal-400 shadow-sm'
-                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-            }`}
-          >
-            Monthly (MVR 499/mo)
-          </button>
-          <button
-            onClick={() => handleSwitchSubscription('one_month')}
-            className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
-              currentTenant.subscriptionModel === 'one_month'
-                ? 'bg-teal-500 text-slate-950 border-teal-400 shadow-sm'
-                : 'bg-slate-800 text-slate-300 border-slate-700 hover:bg-slate-700'
-            }`}
-          >
-            One Month Only (MVR 550)
-          </button>
-        </div>
-      </div>
-
-      {/* Free Tier Limitation / Automatic Fallback Warning Banner */}
-      {(currentTenant.tier === 'free' || currentTenant.subscriptionModel === 'free_trial') && (
-        <div className="p-4 rounded-2xl bg-amber-500/10 border-2 border-amber-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4 animate-fadeIn">
-          <div className="flex items-start sm:items-center space-x-3">
-            <div className="p-2 rounded-xl bg-amber-500/20 text-amber-300 shrink-0">
-              <AlertCircle className="w-5 h-5" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-white flex items-center space-x-2">
-                <span>Free Plan Active • Pro Features Restricted</span>
-                <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-amber-500/20 text-amber-300 font-bold border border-amber-500/30">
-                  Fallback / Free Tier
-                </span>
-              </h3>
-              <p className="text-xs text-slate-300 mt-0.5">
-                Pro features restricted: limited to 1 Cinema Hall, 1 Screen in shared rooms, up to 100 seats access, and random subdomain ({currentTenant.slug}.tickets.mv).
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-center space-x-2 shrink-0">
-            <button
-              onClick={() => handleSwitchSubscription('monthly')}
-              className="px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs shadow-md transition"
-            >
-              Upgrade to Monthly Pro (MVR 499) →
-            </button>
-            <button
-              onClick={() => handleSwitchSubscription('weekly')}
-              className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs border border-slate-700 transition"
-            >
-              Weekly (MVR 149)
-            </button>
-          </div>
-        </div>
-      )}
 
       {/* Navigation Tabs - Mobile First, Zero Horizontal Scroll */}
       <div className="space-y-2 pb-2 border-b border-slate-800">
@@ -1227,6 +1123,93 @@ export const TenantAdminPage: React.FC = () => {
       {/* TAB 4: CUSTOM BRANDING & BANK DETAILS (WITH DIRECT PICTURE UPLOAD) */}
       {activeTab === 'branding' && (
         <form onSubmit={handleSaveBranding} className="space-y-8 max-w-4xl">
+          {/* Cinema Profile & SaaS Plan Card */}
+          <div className="glass-panel rounded-3xl p-6 border border-slate-800 space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-800/80">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-teal-400 tracking-wider block">Active Cinema Profile</span>
+                <h2 className="text-xl font-bold text-white flex items-center space-x-2 mt-0.5">
+                  <span>{currentTenant.name}</span>
+                  <span className="px-2.5 py-0.5 rounded text-xs font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                    {currentTenant.tenantCode || 'OLY-01'}
+                  </span>
+                </h2>
+                <p className="text-xs text-slate-400 mt-1">
+                  100% of ticket sales are paid directly to your cinema bank account. No booking commission fees.
+                </p>
+              </div>
+
+              <div className="p-3.5 rounded-2xl bg-slate-900 border border-slate-800 sm:text-right">
+                <span className="text-[10px] uppercase font-bold text-slate-400 block">Current SaaS Plan:</span>
+                <span className="text-sm font-bold text-white">
+                  {currentTenant.subscriptionModel === 'weekly' ? 'Weekly Plan (MVR 149 / wk)' :
+                   currentTenant.subscriptionModel === 'one_month' ? 'One Month Only (MVR 550)' :
+                   currentTenant.subscriptionModel === 'monthly' ? 'Monthly Plan (MVR 499 / mo)' :
+                   'Free Plan (3-Day Free Trial / Fallback)'}
+                </span>
+              </div>
+            </div>
+
+            {/* Switch Plan Quick Buttons */}
+            <div>
+              <span className="text-xs font-bold text-slate-300 block mb-2">Switch Subscription Plan:</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => handleSwitchSubscription('free_trial')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
+                    currentTenant.subscriptionModel === 'free_trial' || currentTenant.tier === 'free'
+                      ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
+                      : 'bg-slate-900 text-amber-300/80 border-slate-800 hover:bg-slate-800'
+                  }`}
+                  title="Downgrade to Free Tier (Restricts Pro Features)"
+                >
+                  Free Plan (0)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSwitchSubscription('weekly')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
+                    currentTenant.subscriptionModel === 'weekly'
+                      ? 'bg-teal-500 text-slate-950 border-teal-400 shadow-sm'
+                      : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
+                  }`}
+                >
+                  Weekly (MVR 149/wk)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSwitchSubscription('monthly')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
+                    currentTenant.subscriptionModel === 'monthly'
+                      ? 'bg-teal-500 text-slate-950 border-teal-400 shadow-sm'
+                      : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
+                  }`}
+                >
+                  Monthly (MVR 499/mo)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleSwitchSubscription('one_month')}
+                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
+                    currentTenant.subscriptionModel === 'one_month'
+                      ? 'bg-teal-500 text-slate-950 border-teal-400 shadow-sm'
+                      : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
+                  }`}
+                >
+                  One Month Only (MVR 550)
+                </button>
+              </div>
+            </div>
+
+            {/* Free Plan notice if applicable */}
+            {(currentTenant.tier === 'free' || currentTenant.subscriptionModel === 'free_trial') && (
+              <div className="p-3 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 shrink-0" />
+                <span>Free Plan active: limited to 1 hall, 1 screen, up to 100 seats, and random subdomain.</span>
+              </div>
+            )}
+          </div>
           {/* Section 1: Direct Picture Uploads for Branding */}
           <div className="glass-panel rounded-3xl p-6 border border-slate-800 space-y-6">
             <div>
@@ -1772,6 +1755,61 @@ export const TenantAdminPage: React.FC = () => {
                   placeholder="https://www.youtube.com/watch?v=..."
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm font-mono"
                 />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  Movie Genres (Comma separated)
+                </label>
+                <input
+                  type="text"
+                  value={Array.isArray(movieForm.genre) ? movieForm.genre.join(', ') : ''}
+                  onChange={(e) => setMovieForm({
+                    ...movieForm,
+                    genre: e.target.value.split(',').map((g) => g.trim()).filter(Boolean)
+                  })}
+                  placeholder="e.g. Action, Comedy, Horror"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  Cast Actors (Comma separated)
+                </label>
+                <input
+                  type="text"
+                  value={Array.isArray(movieForm.cast) ? movieForm.cast.join(', ') : ''}
+                  onChange={(e) => setMovieForm({
+                    ...movieForm,
+                    cast: e.target.value.split(',').map((c) => c.trim()).filter(Boolean)
+                  })}
+                  placeholder="e.g. Actor 1, Actor 2"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm"
+                />
+              </div>
+
+              {/* Publish / Private Toggle */}
+              <div className="sm:col-span-2 p-3.5 rounded-2xl bg-slate-950 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-white">Movie Publication Status</label>
+                  <p className="text-[11px] text-slate-400 mt-0.5">
+                    {movieForm.published !== false
+                      ? '🟢 Live: Screened publicly on the main landing page & booking portal'
+                      : '🔒 Private / Draft: Saved in your admin panel, hidden from public ticket buyers'}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setMovieForm(prev => ({ ...prev, published: prev.published === false ? true : false }))}
+                  className={`px-4 py-2 rounded-xl text-xs font-bold transition border shrink-0 ${
+                    movieForm.published !== false
+                      ? 'bg-emerald-500 text-slate-950 border-emerald-400 shadow-md'
+                      : 'bg-slate-800 text-amber-300 border-amber-500/40'
+                  }`}
+                >
+                  {movieForm.published !== false ? '🟢 Live (Published)' : '🔒 Private (Draft)'}
+                </button>
               </div>
 
               <div className="sm:col-span-2">

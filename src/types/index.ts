@@ -115,6 +115,7 @@ export interface Movie {
   cast: string[];
   genre: string[];
   releaseDate: string;
+  published?: boolean; // true = Live on site, false = Private / Draft
 }
 
 export interface PriceTiers {
