@@ -66,6 +66,23 @@ export const BookingPage: React.FC = () => {
     );
   }
 
+  if (tenant?.status === 'suspended') {
+    return (
+      <div className="max-w-md mx-auto text-center py-20 px-4 space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center mx-auto shadow-2xl">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-white">Cinema Currently Suspended</h2>
+        <p className="text-xs text-slate-300 leading-relaxed">
+          Online ticket bookings for <strong className="text-white">{tenant.name}</strong> are temporarily suspended by the platform administration.
+        </p>
+        <Link to="/" className="inline-block px-4 py-2 rounded-xl bg-teal-500 text-slate-950 font-bold text-xs">
+          Return to All Cinemas
+        </Link>
+      </div>
+    );
+  }
+
   const isCancelled = showtime.status === 'cancelled';
   const totalPrice = selectedSeats.reduce((sum, s) => sum + s.price, 0);
 

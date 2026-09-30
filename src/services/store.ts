@@ -626,6 +626,142 @@ class MaldivianCinemaStore {
     }
   }
 
+  public deleteTenant(tenantId: string): void {
+    const list = this.getTenants();
+    const tenant = list.find((t) => t.id === tenantId);
+    if (!tenant) return;
+
+    // Delete tenant
+    const updatedTenants = list.filter((t) => t.id !== tenantId);
+    localStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(updatedTenants));
+
+    // Delete all linked halls, screens, showtimes, movies
+    try {
+      const halls = this.getHalls().filter((h) => h.tenantId !== tenantId);
+      localStorage.setItem(STORAGE_KEYS.HALLS, JSON.stringify(halls));
+
+      const screens = this.getScreens().filter((s) => s.tenantId !== tenantId);
+      localStorage.setItem(STORAGE_KEYS.SCREENS, JSON.stringify(screens));
+
+      const showtimes = this.getShowtimes().filter((st) => st.tenantId !== tenantId);
+      localStorage.setItem(STORAGE_KEYS.SHOWTIMES, JSON.stringify(showtimes));
+
+      const movies = this.getMovies().filter((m) => m.tenantId !== tenantId);
+      localStorage.setItem(STORAGE_KEYS.MOVIES, JSON.stringify(movies));
+    } catch {}
+
+    this.addLog({
+      id: `log-${Date.now()}-del`,
+      type: 'tenant',
+      tenantId,
+      message: `Tenant "${tenant.name}" (${tenant.tenantCode}) permanently deleted by Super Admin`,
+      details: 'All associated halls, screens, showtimes and portal routes purged.',
+      status: 'warning',
+      timestamp: new Date().toISOString()
+    });
+
+    this.broadcastSync();
+  }
+
+  public purchaseCinemaSlot(
+    ownerEmail: string,
+    cinemaData: { name: string; island: string; atoll: string; contactPhone?: string }
+  ): Tenant {
+    const list = this.getTenants();
+    const existing = list.filter((t) => t.ownerEmail.toLowerCase() === ownerEmail.toLowerCase());
+    const newSlotCount = existing.length + 1;
+
+    existing.forEach((t) => {
+      t.cinemaSlots = newSlotCount;
+    });
+
+    const tenantCode = `CIN-${cinemaData.island.substring(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`;
+    const baseSlug = cinemaData.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `cinema-${Date.now()}`;
+    let slug = baseSlug;
+    let counter = 1;
+    while (list.some((t) => t.slug.toLowerCase() === slug.toLowerCase())) {
+      slug = `${baseSlug}-${counter++}`;
+    }
+
+    const newTenant: Tenant = {
+      id: `tenant-${Date.now()}`,
+      name: cinemaData.name,
+      slug,
+      tenantCode,
+      tier: 'paid',
+      status: 'active',
+      ownerEmail,
+      cinemaSlots: newSlotCount,
+      subscriptionModel: 'monthly',
+      subscriptionPriceMvr: 499,
+      subscriptionBillingDate: new Date(Date.now() + 30 * 86400000).toISOString(),
+      createdAt: new Date().toISOString(),
+      branding: {
+        logoUrl: 'https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?w=200&h=200&fit=crop&q=80',
+        bannerUrl: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1600&h=600&fit=crop&q=80',
+        primaryColor: '#0d9488',
+        contactPhone: cinemaData.contactPhone || '+960 777-1234',
+        contactViber: cinemaData.contactPhone || '+960 777-1234',
+        island: cinemaData.island,
+        atoll: cinemaData.atoll,
+        terms: 'Tickets are non-refundable. Please arrive 15 minutes before showtime.',
+        taglineEn: 'Island Cinema & Entertainment Screen',
+        taglineDv: 'ދިވެހި ރާއްޖޭގެ ރަށްރަށުގެ ސިނަމާ',
+        bankDetails: {
+          bankName: 'Bank of Maldives (BML)',
+          accountNumber: '7701 0000 0000 001',
+          accountName: `${cinemaData.name} Pvt Ltd`,
+          currency: 'MVR',
+          instructions: 'Please mention your booking reference in remarks/memo.'
+        }
+      }
+    };
+
+    list.push(newTenant);
+    localStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(list));
+
+    const defaultHall: Hall = {
+      id: `hall-${Date.now()}`,
+      tenantId: newTenant.id,
+      name: `${cinemaData.name} Main Hall`,
+      island: cinemaData.island,
+      atoll: cinemaData.atoll,
+      address: `${cinemaData.island}, Maldives`,
+      contactPhone: cinemaData.contactPhone || '+960 777-1234'
+    };
+    this.saveHall(defaultHall);
+
+    const defaultScreen: Screen = {
+      id: `screen-${Date.now()}`,
+      hallId: defaultHall.id,
+      tenantId: newTenant.id,
+      screenName: 'Screen 1 (Main Screen)',
+      positionInHall: 'center',
+      layout: {
+        rows: 8,
+        cols: 12,
+        rowLabels: ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'],
+        seats: generateStandardMatrix(8, 12, 'S1'),
+        screenPosition: 'top',
+        stageName: `${cinemaData.name.toUpperCase()} MAIN SCREEN`
+      }
+    };
+    this.saveScreen(defaultScreen);
+
+    this.addLog({
+      id: `log-${Date.now()}-slot`,
+      type: 'tenant',
+      tenantId: newTenant.id,
+      message: `Additional Cinema Slot Purchased by ${ownerEmail}: "${newTenant.name}" (${newTenant.tenantCode})`,
+      details: `Slots Expanded: ${newSlotCount} / ${newSlotCount} Cinemas. Plan: Monthly MVR 499.`,
+      status: 'success',
+      timestamp: new Date().toISOString()
+    });
+
+    this.broadcastSync();
+    return newTenant;
+  }
+
   // --- HALLS ---
   public getHalls(tenantId?: string): Hall[] {
     try {

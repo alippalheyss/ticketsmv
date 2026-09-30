@@ -5,7 +5,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { 
   Shield, TrendingUp, Users, Ticket, Building, Activity, 
   DollarSign, Mail, Search, RefreshCw, Calendar, Sparkles, 
-  CheckCircle2, Lock, LogOut, KeyRound, AlertCircle, Phone, MessageCircle, Send, Check 
+  CheckCircle2, Lock, LogOut, KeyRound, AlertCircle, Phone, MessageCircle, Send, Check, Trash2 
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -198,6 +198,16 @@ export const SuperAdminPage: React.FC = () => {
   const handleToggleStatus = (tenant: Tenant) => {
     const nextStatus = tenant.status === 'active' ? 'suspended' : 'active';
     cinemaStore.updateTenantStatus(tenant.id, nextStatus);
+    loadData();
+  };
+
+  // Permanently Delete Cinema
+  const handleDeleteTenant = (tenant: Tenant) => {
+    const confirmed = window.confirm(
+      `Are you sure you want to permanently delete cinema "${tenant.name}" (${tenant.tenantCode})?\n\nThis will remove all halls, screens, showtimes, and public routes for this cinema. This action cannot be undone.`
+    );
+    if (!confirmed) return;
+    cinemaStore.deleteTenant(tenant.id);
     loadData();
   };
 
@@ -524,9 +534,9 @@ export const SuperAdminPage: React.FC = () => {
                           cinemaStore.expireTenantNow(tenant.id);
                           loadData();
                         }}
-                        className="flex-1 py-1.5 rounded-lg text-[10px] font-bold bg-rose-500/10 text-rose-300 border border-rose-500/30 hover:bg-rose-500/20 transition text-center"
+                        className="py-1.5 px-2 rounded-lg text-[10px] font-bold bg-rose-500/10 text-rose-300 border border-rose-500/30 hover:bg-rose-500/20 transition text-center"
                       >
-                        ⚡ Expire (Fallback)
+                        ⚡ Expire
                       </button>
                     )}
                     <button
@@ -538,6 +548,14 @@ export const SuperAdminPage: React.FC = () => {
                       }`}
                     >
                       {isActive ? 'Suspend' : 'Activate'}
+                    </button>
+                    <button
+                      onClick={() => handleDeleteTenant(tenant)}
+                      className="py-1.5 px-2.5 rounded-lg text-[10px] font-bold bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/40 transition flex items-center justify-center space-x-1"
+                      title="Permanently Delete Cinema"
+                    >
+                      <Trash2 className="w-3 h-3" />
+                      <span>Delete</span>
                     </button>
                   </div>
                 </div>
@@ -700,11 +718,19 @@ export const SuperAdminPage: React.FC = () => {
                           onClick={() => handleToggleStatus(tenant)}
                           className={`px-3 py-1.5 rounded-lg text-xs font-bold transition border ${
                             isActive
-                              ? 'border-rose-500/40 text-rose-400 hover:bg-rose-500/10'
+                              ? 'border-amber-500/40 text-amber-300 hover:bg-amber-500/10'
                               : 'border-emerald-500/40 text-emerald-400 hover:bg-emerald-500/10'
                           }`}
                         >
                           {isActive ? 'Suspend' : 'Activate'}
+                        </button>
+                        <button
+                          onClick={() => handleDeleteTenant(tenant)}
+                          className="px-3 py-1.5 rounded-lg text-xs font-bold transition border border-rose-500/40 text-rose-400 hover:bg-rose-500/15 inline-flex items-center space-x-1"
+                          title="Permanently Delete Cinema"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                          <span>Delete</span>
                         </button>
                       </td>
                     </tr>

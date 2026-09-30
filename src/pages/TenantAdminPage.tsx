@@ -8,7 +8,7 @@ import { SeatMatrixBuilder } from '../components/SeatMatrixBuilder';
 import { 
   Building2, Film, Calendar, Users, Sliders, ExternalLink, Plus, Edit3, 
   Download, DollarSign, Upload, MapPin, Check, Ban, Trash2, LayoutGrid, 
-  CreditCard, Sparkles, AlertCircle, Copy, Image, Play, CheckCircle2, X, LogOut, Lock, KeyRound,
+  CreditCard, Sparkles, AlertCircle, AlertTriangle, Copy, Image, Play, CheckCircle2, X, LogOut, Lock, KeyRound,
   Globe, RefreshCw
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -94,6 +94,15 @@ export const TenantAdminPage: React.FC = () => {
     instructions: '',
     qrImageUrl: '',
   });
+
+  // Additional Cinema Slots & Chain Expansion Form
+  const [showBuySlotModal, setShowBuySlotModal] = useState(false);
+  const [newSlotCinemaName, setNewSlotCinemaName] = useState('');
+  const [newSlotIsland, setNewSlotIsland] = useState('');
+  const [newSlotAtoll, setNewSlotAtoll] = useState('Kaafu (K)');
+  const [newSlotPhone, setNewSlotPhone] = useState('');
+  const [slotError, setSlotError] = useState('');
+  const [isActivatingSlot, setIsActivatingSlot] = useState(false);
 
   // Movie Customization Form State
   const [movieForm, setMovieForm] = useState<Movie>({
@@ -473,6 +482,40 @@ export const TenantAdminPage: React.FC = () => {
     alert(`Subscription plan updated to: ${model.toUpperCase()} (MVR ${price}). No ticket fees are charged.`);
   };
 
+  // Purchase Extra Cinema Slot & Expand Chain
+  const handlePurchaseSlot = (e: React.FormEvent) => {
+    e.preventDefault();
+    setSlotError('');
+    if (!newSlotCinemaName.trim() || !newSlotIsland.trim()) {
+      setSlotError('Please provide cinema name and island location.');
+      return;
+    }
+
+    if (!currentTenant) return;
+
+    setIsActivatingSlot(true);
+    try {
+      const created = cinemaStore.purchaseCinemaSlot(currentTenant.ownerEmail, {
+        name: newSlotCinemaName.trim(),
+        island: newSlotIsland.trim(),
+        atoll: newSlotAtoll,
+        contactPhone: newSlotPhone.trim() || currentTenant.branding.contactPhone
+      });
+
+      refreshData();
+      setSelectedTenantId(created.id);
+      setShowBuySlotModal(false);
+      setNewSlotCinemaName('');
+      setNewSlotIsland('');
+      setNewSlotPhone('');
+      alert(`🎉 Cinema Slot Activated! You can now manage "${created.name}" (${created.tenantCode}) alongside your other cinema.`);
+    } catch {
+      setSlotError('Failed to activate cinema slot. Please try again.');
+    } finally {
+      setIsActivatingSlot(false);
+    }
+  };
+
   // Export Attendees to CSV
   const handleExportCSV = () => {
     const headers = ['Booking Ref', 'Guest Name', 'Email', 'Phone', 'Seats', 'Total (MVR)', 'Payment Status', 'Gate Checked In'];
@@ -640,18 +683,49 @@ export const TenantAdminPage: React.FC = () => {
         </div>
 
         <div className="flex items-center space-x-2 self-end sm:self-auto shrink-0">
-          <select
-            value={selectedTenantId}
-            onChange={(e) => setSelectedTenantId(e.target.value)}
-            className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-teal-400 font-mono"
-            title="Switch Cinema Account"
-          >
-            {tenants.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.tenantCode || 'ORG'} • {t.name}
-              </option>
-            ))}
-          </select>
+          {(() => {
+            const myTenants = tenants.filter(
+              (t) => t.ownerEmail.toLowerCase() === (currentTenant.ownerEmail || '').toLowerCase()
+            );
+            const totalAllowedSlots = currentTenant.cinemaSlots || Math.max(1, myTenants.length);
+
+            return (
+              <>
+                {myTenants.length <= 1 ? (
+                  <div className="px-3 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold text-white font-mono flex items-center space-x-1.5">
+                    <Building2 className="w-3.5 h-3.5 text-teal-400" />
+                    <span>{currentTenant.tenantCode || 'ORG'} • {currentTenant.name}</span>
+                  </div>
+                ) : (
+                  <select
+                    value={selectedTenantId}
+                    onChange={(e) => setSelectedTenantId(e.target.value)}
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-900 border border-slate-700 text-xs font-bold text-white focus:outline-none focus:border-teal-400 font-mono"
+                    title="Switch between your managed cinemas"
+                  >
+                    {myTenants.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.tenantCode || 'ORG'} • {t.name}
+                      </option>
+                    ))}
+                  </select>
+                )}
+
+                <button
+                  type="button"
+                  onClick={() => setShowBuySlotModal(true)}
+                  className="flex items-center space-x-1.5 px-3 py-1.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-teal-500/20 hover:from-amber-500/30 hover:to-teal-500/30 text-amber-300 border border-amber-500/40 text-xs font-bold transition shadow-sm"
+                  title="Expand chain: Buy an extra cinema management slot"
+                >
+                  <Plus className="w-3.5 h-3.5 text-amber-400" />
+                  <span className="hidden sm:inline">Add Cinema</span>
+                  <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-950 text-amber-200 border border-amber-500/30 font-mono">
+                    Slot ({myTenants.length}/{totalAllowedSlots})
+                  </span>
+                </button>
+              </>
+            );
+          })()}
 
           <Link
             to={`/t/${currentTenant.slug}`}
@@ -672,6 +746,24 @@ export const TenantAdminPage: React.FC = () => {
           </button>
         </div>
       </div>
+
+      {/* Prominent Cinema Suspension Alert Banner */}
+      {currentTenant.status === 'suspended' && (
+        <div className="p-4 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xl">
+          <div className="flex items-center space-x-3">
+            <AlertTriangle className="w-6 h-6 text-amber-400 shrink-0" />
+            <div>
+              <h4 className="font-bold text-sm text-white">Cinema Portal Suspended by Platform Super Admin</h4>
+              <p className="text-xs text-amber-300/90 mt-0.5">
+                Online ticket sales and public bookings for <strong>{currentTenant.name}</strong> are temporarily disabled. Please contact Super Admin at alippalhey@gmail.com to reactivate.
+              </p>
+            </div>
+          </div>
+          <span className="px-3 py-1 rounded-full bg-amber-500/25 text-amber-200 text-xs font-bold border border-amber-500/40 whitespace-nowrap self-start sm:self-auto">
+            STATUS: SUSPENDED
+          </span>
+        </div>
+      )}
 
       {/* Navigation Tabs - Mobile First, Zero Horizontal Scroll */}
       <div className="space-y-2 pb-2 border-b border-slate-800">
@@ -1514,13 +1606,24 @@ export const TenantAdminPage: React.FC = () => {
             </div>
           </div>
 
-          <button
-            type="submit"
-            className="px-8 py-3.5 rounded-2xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold text-sm shadow-xl shadow-teal-500/20 transition active:scale-95"
-          >
-            Save Branding & Bank Details
-          </button>
-        </form>
+            {/* Platform Policy Notice: No Self-Deletion of Cinema Entities */}
+            <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-start space-x-3 text-xs text-slate-400">
+              <Lock className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" />
+              <div className="space-y-1">
+                <span className="font-bold text-slate-200">Cinema Deletion & Decommissioning Policy</span>
+                <p className="leading-relaxed">
+                  Cinema entities cannot be removed from organizer settings to protect active customer bookings and gate verification records. Only Super Admin has authorization to permanently delete or decommission cinemas on the platform. To request cinema deletion, contact <span className="text-teal-400 font-mono font-bold">alippalhey@gmail.com</span>.
+                </p>
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              className="px-8 py-3.5 rounded-2xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold text-sm shadow-xl shadow-teal-500/20 transition active:scale-95"
+            >
+              Save Branding & Bank Details
+            </button>
+          </form>
       )}
 
       {/* TAB 5: SALES & ATTENDEE REPORTS */}
@@ -2118,6 +2221,140 @@ export const TenantAdminPage: React.FC = () => {
                 className="px-5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs"
               >
                 Schedule
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* MODAL: BUY ADDITIONAL CINEMA SLOT & EXPAND CHAIN */}
+      {showBuySlotModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-md animate-fadeIn">
+          <form
+            onSubmit={handlePurchaseSlot}
+            className="bg-slate-900 border border-slate-700/80 rounded-3xl p-6 sm:p-7 max-w-lg w-full space-y-5 shadow-2xl relative"
+          >
+            <button
+              type="button"
+              onClick={() => setShowBuySlotModal(false)}
+              className="absolute top-4 right-4 p-2 text-slate-400 hover:text-white rounded-xl bg-slate-800/60 transition"
+            >
+              <X className="w-4 h-4" />
+            </button>
+
+            <div className="space-y-1.5">
+              <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-bold">
+                <Sparkles className="w-3.5 h-3.5 text-amber-400" />
+                <span>Multi-Cinema Expansion</span>
+              </div>
+              <h3 className="text-xl font-extrabold text-white">Purchase Additional Cinema Slot</h3>
+              <p className="text-xs text-slate-300 leading-relaxed">
+                By default, each organizer account can operate 1 cinema. Purchase an extra cinema slot to manage a second cinema branch, island hall, or open-air screen under your same account.
+              </p>
+            </div>
+
+            {/* Pricing badge */}
+            <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/10 via-slate-950 to-teal-500/10 border border-amber-500/30 flex items-center justify-between">
+              <div>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Slot Fee</span>
+                <span className="text-lg font-black text-amber-300">MVR 499</span>
+                <span className="text-xs text-slate-400"> / month</span>
+              </div>
+              <span className="px-2.5 py-1 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/30 text-xs font-bold">
+                +1 Cinema Management Slot
+              </span>
+            </div>
+
+            {slotError && (
+              <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>{slotError}</span>
+              </div>
+            )}
+
+            <div className="space-y-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">New Cinema / Hall Name *</label>
+                <input
+                  type="text"
+                  required
+                  value={newSlotCinemaName}
+                  onChange={(e) => setNewSlotCinemaName(e.target.value)}
+                  placeholder="e.g. Olympus Rooftop Lounge or Velidhoo Screen"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:border-amber-400 focus:outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Island Location *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newSlotIsland}
+                    onChange={(e) => setNewSlotIsland(e.target.value)}
+                    placeholder="e.g. Hulhumalé or Eydhafushi"
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:border-amber-400 focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Atoll *</label>
+                  <select
+                    value={newSlotAtoll}
+                    onChange={(e) => setNewSlotAtoll(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:border-amber-400 focus:outline-none"
+                  >
+                    <option value="Kaafu (K)">Kaafu (K)</option>
+                    <option value="Alif Alif (AA)">Alif Alif (AA)</option>
+                    <option value="Alif Dhaal (ADh)">Alif Dhaal (ADh)</option>
+                    <option value="Baa (B)">Baa (B)</option>
+                    <option value="Haa Alif (HA)">Haa Alif (HA)</option>
+                    <option value="Haa Dhaalu (HDh)">Haa Dhaalu (HDh)</option>
+                    <option value="Shaviyani (Sh)">Shaviyani (Sh)</option>
+                    <option value="Noonu (N)">Noonu (N)</option>
+                    <option value="Raa (R)">Raa (R)</option>
+                    <option value="Lhaviyani (Lh)">Lhaviyani (Lh)</option>
+                    <option value="Vaavu (V)">Vaavu (V)</option>
+                    <option value="Meemu (M)">Meemu (M)</option>
+                    <option value="Faafu (F)">Faafu (F)</option>
+                    <option value="Dhaalu (Dh)">Dhaalu (Dh)</option>
+                    <option value="Thaa (Th)">Thaa (Th)</option>
+                    <option value="Laamu (L)">Laamu (L)</option>
+                    <option value="Gaafu Alif (GA)">Gaafu Alif (GA)</option>
+                    <option value="Gaafu Dhaalu (GDh)">Gaafu Dhaalu (GDh)</option>
+                    <option value="Gnaviyani (Gn)">Gnaviyani (Gn)</option>
+                    <option value="Seenu (S)">Seenu (S)</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">Contact Phone Number</label>
+                <input
+                  type="tel"
+                  value={newSlotPhone}
+                  onChange={(e) => setNewSlotPhone(e.target.value)}
+                  placeholder="e.g. +960 777-1234"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:border-amber-400 focus:outline-none font-mono"
+                />
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowBuySlotModal(false)}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isActivatingSlot}
+                className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-teal-500 hover:from-amber-400 hover:to-teal-400 text-slate-950 font-black text-xs shadow-lg transition active:scale-95 disabled:opacity-50"
+              >
+                {isActivatingSlot ? 'Activating Slot...' : 'Purchase Slot & Add Cinema →'}
               </button>
             </div>
           </form>

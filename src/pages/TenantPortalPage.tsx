@@ -76,6 +76,37 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
     );
   }
 
+  if (tenant.status === 'suspended') {
+    return (
+      <div className="max-w-lg mx-auto text-center py-20 px-4 space-y-5">
+        <div className="w-16 h-16 rounded-2xl bg-amber-500/10 text-amber-400 border border-amber-500/30 flex items-center justify-center mx-auto shadow-2xl">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <div className="space-y-2">
+          <span className="px-3 py-1 rounded-full bg-amber-500/15 border border-amber-500/30 text-amber-300 text-[11px] font-bold uppercase tracking-wider">
+            Portal Suspended
+          </span>
+          <h2 className="text-2xl font-extrabold text-white">Cinema Bookings Offline</h2>
+          <p className="text-xs text-slate-300 leading-relaxed max-w-md mx-auto">
+            Ticket sales and online seat reservations for <strong className="text-white">{tenant.name}</strong> are temporarily suspended by platform administration.
+          </p>
+        </div>
+        <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 text-xs text-slate-400 space-y-1">
+          <p>Are you the cinema organizer?</p>
+          <p>Contact Super Admin at <span className="text-teal-400 font-mono font-bold">alippalhey@gmail.com</span> to reactivate your portal.</p>
+        </div>
+        <div className="pt-2">
+          <Link
+            to="/"
+            className="inline-flex items-center px-5 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-teal-500/20 transition active:scale-95"
+          >
+            ← Explore Other Active Cinemas
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-10 pb-16">
       {/* Branded Cinema Banner Header */}

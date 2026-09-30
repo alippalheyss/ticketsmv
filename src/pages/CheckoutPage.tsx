@@ -74,6 +74,24 @@ export const CheckoutPage: React.FC = () => {
     );
   }
 
+  if (tenant?.status === 'suspended') {
+    return (
+      <div className="max-w-md mx-auto text-center py-20 px-4 space-y-4">
+        <AlertTriangle className="w-16 h-16 text-amber-500 mx-auto mb-4" />
+        <h2 className="text-xl font-bold text-white mb-2">Cinema Currently Suspended</h2>
+        <p className="text-xs text-slate-400 mb-6">
+          Checkout is disabled because this cinema has been temporarily suspended by platform administration.
+        </p>
+        <Link
+          to="/"
+          className="px-4 py-2 rounded-xl bg-teal-500 text-slate-950 font-bold text-xs"
+        >
+          Return to All Cinemas
+        </Link>
+      </div>
+    );
+  }
+
   const totalPrice = selectedSeats.reduce((sum, s) => sum + s.price, 0);
 
   // Handle Transfer Receipt file upload

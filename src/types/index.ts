@@ -39,6 +39,7 @@ export interface Tenant {
   subscriptionBillingDate?: string;
   createdAt: string;
   ownerEmail: string;
+  cinemaSlots?: number; // Allowed cinema management slots (default: 1)
 }
 
 export interface TenantRegistrationRequest {

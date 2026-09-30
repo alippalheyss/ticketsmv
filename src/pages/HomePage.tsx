@@ -104,7 +104,11 @@ export const HomePage: React.FC = () => {
       if (!matchTitleEn && !matchTitleDv && !matchGenre) return false;
     }
 
-    const movieShowtimes = showtimes.filter((s) => s.movieId === movie.id);
+    const movieShowtimes = showtimes.filter((s) => {
+      if (s.movieId !== movie.id) return false;
+      const tenant = tenants.find((t) => t.id === s.tenantId);
+      return tenant && tenant.status !== 'suspended';
+    });
 
     if (selectedAtoll !== 'all') {
       const matchesAtoll = movieShowtimes.some((s) => {
@@ -400,6 +404,7 @@ export const HomePage: React.FC = () => {
               const movieShowtimes = showtimes.filter((s) => {
                 if (s.movieId !== movie.id) return false;
                 const tenant = tenants.find((t) => t.id === s.tenantId);
+                if (!tenant || tenant.status === 'suspended') return false;
                 if (selectedAtoll !== 'all' && tenant?.branding.atoll !== selectedAtoll) return false;
                 if (selectedIsland !== 'all' && tenant?.branding.island !== selectedIsland) return false;
                 return true;
