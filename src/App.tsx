@@ -15,6 +15,29 @@ import { TenantAdminPage } from './pages/TenantAdminPage';
 import { SuperAdminPage } from './pages/SuperAdminPage';
 
 import { AdminHubPage } from './pages/AdminHubPage';
+import { cinemaStore } from './services/store';
+
+function RootRouteHandler() {
+  const host = window.location.hostname;
+  const parts = host.split('.');
+
+  // Subdomain detection:
+  // e.g. "olympus.tickets.mv" -> parts: ['olympus', 'tickets', 'mv'] -> subdomain: 'olympus'
+  // e.g. "olympus.localhost" -> parts: ['olympus', 'localhost'] -> subdomain: 'olympus'
+  const isSubdomain = 
+    (parts.length >= 3 && parts[0] !== 'www' && !host.endsWith('.vercel.app')) ||
+    (parts.length === 2 && parts[1] === 'localhost' && parts[0] !== 'www');
+
+  if (isSubdomain) {
+    const slug = parts[0].toLowerCase();
+    const tenant = cinemaStore.getTenantBySlug(slug);
+    if (tenant) {
+      return <TenantPortalPage tenantSlugFromHost={slug} />;
+    }
+  }
+
+  return <HomePage />;
+}
 
 export function App() {
   return (
@@ -24,8 +47,8 @@ export function App() {
           <Navbar />
           <main className="flex-1">
             <Routes>
-              {/* Role C: End Users / Guests (No login required) */}
-              <Route path="/" element={<HomePage />} />
+              {/* Role C: End Users / Guests (Subdomain-aware root) */}
+              <Route path="/" element={<RootRouteHandler />} />
               <Route path="/t/:tenantSlug" element={<TenantPortalPage />} />
               <Route path="/book/:showtimeId" element={<BookingPage />} />
               <Route path="/checkout/:showtimeId" element={<CheckoutPage />} />

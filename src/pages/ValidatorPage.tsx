@@ -355,33 +355,6 @@ export const ValidatorPage: React.FC = () => {
                 </div>
               )}
             </div>
-
-            {/* Quick Demo Buttons for Door Staff Testing */}
-            <div className="mt-4 pt-4 border-t border-slate-800">
-              <span className="text-[10px] uppercase font-bold text-slate-500 block mb-2">
-                Quick Gate Simulation Tests:
-              </span>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  onClick={() => handleValidation('MV-7749-O')}
-                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-mono text-teal-300"
-                >
-                  Test Valid: MV-7749-O
-                </button>
-                <button
-                  onClick={() => handleValidation('MV-9120-V')}
-                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-mono text-amber-300"
-                >
-                  Test Pending: MV-9120-V
-                </button>
-                <button
-                  onClick={() => handleValidation('FAKE-CODE-999')}
-                  className="px-2.5 py-1 rounded bg-slate-800 hover:bg-slate-700 text-xs font-mono text-rose-300"
-                >
-                  Test Invalid
-                </button>
-              </div>
-            </div>
           </div>
 
           {/* Recent Scan History */}

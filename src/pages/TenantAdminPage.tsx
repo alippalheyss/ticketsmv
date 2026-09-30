@@ -12,6 +12,7 @@ import {
   Globe, RefreshCw
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export const TenantAdminPage: React.FC = () => {
   const { formatCurrency } = useLanguage();
@@ -496,7 +497,7 @@ export const TenantAdminPage: React.FC = () => {
     document.body.removeChild(link);
   };
 
-  const handleTenantLogin = (e?: React.FormEvent, customTenant?: Tenant) => {
+  const handleTenantLogin = async (e?: React.FormEvent, customTenant?: Tenant) => {
     if (e) e.preventDefault();
     setLoginError('');
 
@@ -508,6 +509,22 @@ export const TenantAdminPage: React.FC = () => {
     }
 
     const query = loginCode.trim().toLowerCase();
+    if (!query) {
+      setLoginError('Please enter your Cinema Code or Owner Email');
+      return;
+    }
+
+    if (isSupabaseConfigured() && query.includes('@')) {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: query,
+        password: loginPass
+      });
+      if (error) {
+        setLoginError(error.message);
+        return;
+      }
+    }
+
     const found = tenants.find(
       (t) =>
         t.tenantCode?.toLowerCase() === query ||
@@ -516,7 +533,7 @@ export const TenantAdminPage: React.FC = () => {
     );
 
     if (!found) {
-      setLoginError(`No cinema organizer found with code "${loginCode}". Try demo: OLY-01`);
+      setLoginError(`No cinema organizer found for "${loginCode}". Check your email or contact Super Admin.`);
       return;
     }
 
@@ -565,13 +582,10 @@ export const TenantAdminPage: React.FC = () => {
                 required
                 value={loginCode}
                 onChange={(e) => setLoginCode(e.target.value)}
-                placeholder="e.g. OLY-01 or admin@olympus.mv"
+                placeholder="e.g. OLY-01 or alippalheys@gmail.com"
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-teal-400"
               />
             </div>
-            <span className="text-[10px] text-slate-500 mt-1 block font-mono">
-              Recognized Codes: OLY-01, VEL-02, KHD-03
-            </span>
           </div>
 
           <div>
@@ -582,7 +596,7 @@ export const TenantAdminPage: React.FC = () => {
               type="password"
               value={loginPass}
               onChange={(e) => setLoginPass(e.target.value)}
-              placeholder="•••••••• (Default: admin)"
+              placeholder="••••••••"
               className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-teal-400"
             />
           </div>
@@ -593,33 +607,6 @@ export const TenantAdminPage: React.FC = () => {
           >
             Enter Cinema Dashboard →
           </button>
-
-          {/* Quick Demo Logins */}
-          <div className="pt-4 border-t border-slate-800/80 space-y-2">
-            <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block text-center">
-              1-Click Demo Organizer Sign In:
-            </span>
-            <div className="grid grid-cols-1 gap-1.5">
-              {tenants.map((t) => (
-                <button
-                  key={t.id}
-                  type="button"
-                  onClick={() => handleTenantLogin(undefined, t)}
-                  className="flex items-center justify-between p-2 rounded-xl bg-slate-900 hover:bg-slate-800 border border-slate-800 text-left text-xs transition group"
-                >
-                  <div className="flex items-center space-x-2">
-                    <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                      {t.tenantCode}
-                    </span>
-                    <span className="font-bold text-slate-200 group-hover:text-teal-300 transition">
-                      {t.name}
-                    </span>
-                  </div>
-                  <span className="text-[10px] text-teal-400">Log In →</span>
-                </button>
-              ))}
-            </div>
-          </div>
         </form>
 
         <div className="text-center pt-2">

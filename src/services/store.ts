@@ -23,7 +23,7 @@ const INITIAL_TENANTS: Tenant[] = [
     tenantCode: 'OLY-01', // Recognized Tenant Code
     tier: 'paid', // Paid tier = multi-screen / multi-hall enabled
     status: 'active',
-    ownerEmail: 'admin@olympus.mv',
+    ownerEmail: 'alippalheys@gmail.com',
     subscriptionModel: 'monthly', // 'weekly' | 'monthly' | 'one_month' | 'free_trial'
     subscriptionPriceMvr: 499, // Flat monthly subscription (no commission percentage!)
     subscriptionBillingDate: new Date(Date.now() + 25 * 86400000).toISOString(),
@@ -517,7 +517,21 @@ class MaldivianCinemaStore {
     try {
       this.checkAndExpireSubscriptions();
       const data = localStorage.getItem(STORAGE_KEYS.TENANTS);
-      return data ? JSON.parse(data) : INITIAL_TENANTS;
+      if (data) {
+        const list: Tenant[] = JSON.parse(data);
+        let updated = false;
+        list.forEach((t) => {
+          if (t.id === 'tenant-1' && t.ownerEmail !== 'alippalheys@gmail.com') {
+            t.ownerEmail = 'alippalheys@gmail.com';
+            updated = true;
+          }
+        });
+        if (updated) {
+          localStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(list));
+        }
+        return list;
+      }
+      return INITIAL_TENANTS;
     } catch {
       return INITIAL_TENANTS;
     }

@@ -8,8 +8,13 @@ import {
   Film, Sparkles, ChevronRight, ShieldCheck, AlertCircle 
 } from 'lucide-react';
 
-export const TenantPortalPage: React.FC = () => {
-  const { tenantSlug } = useParams<{ tenantSlug: string }>();
+interface TenantPortalProps {
+  tenantSlugFromHost?: string;
+}
+
+export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHost }) => {
+  const { tenantSlug: paramSlug } = useParams<{ tenantSlug: string }>();
+  const tenantSlug = tenantSlugFromHost || paramSlug;
   const { t, formatCurrency, isDhivehi } = useLanguage();
 
   const [tenant, setTenant] = useState<Tenant | null>(null);

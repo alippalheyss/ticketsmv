@@ -7,6 +7,7 @@ import {
   MapPin, Check, X, Phone, Mail, MessageCircle, Send, Plus
 } from 'lucide-react';
 import { cinemaStore } from '../services/store';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Tenant, TenantRegistrationRequest, Hall, Screen } from '../types';
 
 export const AdminHubPage: React.FC = () => {
@@ -60,7 +61,7 @@ export const AdminHubPage: React.FC = () => {
     }
   }, []);
 
-  const handleLogin = (e?: React.FormEvent, customTenant?: Tenant) => {
+  const handleLogin = async (e?: React.FormEvent, customTenant?: Tenant) => {
     if (e) e.preventDefault();
     setLoginError('');
 
@@ -77,6 +78,17 @@ export const AdminHubPage: React.FC = () => {
       return;
     }
 
+    if (isSupabaseConfigured() && query.includes('@')) {
+      const { error } = await supabase.auth.signInWithPassword({
+        email: query,
+        password: loginPassword
+      });
+      if (error) {
+        setLoginError(error.message);
+        return;
+      }
+    }
+
     const found = tenants.find(
       (t) =>
         t.tenantCode?.toLowerCase() === query ||
@@ -85,7 +97,7 @@ export const AdminHubPage: React.FC = () => {
     );
 
     if (!found) {
-      setLoginError(`No cinema organizer found with code or email "${loginIdentifier}". Try demo code: OLY-01`);
+      setLoginError(`No cinema organizer found for "${loginIdentifier}". Check your email or register below.`);
       return;
     }
 
@@ -808,13 +820,10 @@ export const AdminHubPage: React.FC = () => {
                     required
                     value={loginIdentifier}
                     onChange={(e) => setLoginIdentifier(e.target.value)}
-                    placeholder="e.g. OLY-01 or admin@olympus.mv"
+                    placeholder="e.g. OLY-01 or alippalheys@gmail.com"
                     className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-teal-400"
                   />
                 </div>
-                <span className="text-[10px] text-slate-500 mt-1 block">
-                  Format: Uppercase 3-letter code + number (e.g. OLY-01)
-                </span>
               </div>
 
               <div>
@@ -825,7 +834,7 @@ export const AdminHubPage: React.FC = () => {
                   type="password"
                   value={loginPassword}
                   onChange={(e) => setLoginPassword(e.target.value)}
-                  placeholder="•••••••• (Default: admin)"
+                  placeholder="••••••••"
                   className="w-full px-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-teal-400"
                 />
               </div>
@@ -837,33 +846,6 @@ export const AdminHubPage: React.FC = () => {
                 Sign In to Cinema Portal →
               </button>
             </form>
-
-            {/* Quick 1-Click Demo Logins */}
-            <div className="pt-4 border-t border-slate-800 space-y-2">
-              <span className="text-[10px] uppercase font-bold text-slate-400 tracking-wider block text-center">
-                1-Click Instant Demo Accounts:
-              </span>
-              <div className="grid grid-cols-1 gap-1.5">
-                {tenants.map((t) => (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => handleLogin(undefined, t)}
-                    className="flex items-center justify-between p-2 rounded-xl bg-slate-950 hover:bg-slate-800 border border-slate-800 text-left text-xs transition group"
-                  >
-                    <div className="flex items-center space-x-2">
-                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                        {t.tenantCode}
-                      </span>
-                      <span className="font-bold text-slate-200 group-hover:text-teal-300 transition">
-                        {t.name}
-                      </span>
-                    </div>
-                    <span className="text-[10px] text-teal-400 font-semibold">Demo Sign In →</span>
-                  </button>
-                ))}
-              </div>
-            </div>
 
             {/* Switch to Registration */}
             <div className="text-center pt-2 text-xs text-slate-400">

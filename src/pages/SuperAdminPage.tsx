@@ -8,6 +8,7 @@ import {
   CheckCircle2, Lock, LogOut, KeyRound, AlertCircle, Phone, MessageCircle, Send, Check 
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export const SuperAdminPage: React.FC = () => {
   const { formatCurrency } = useLanguage();
@@ -44,19 +45,45 @@ export const SuperAdminPage: React.FC = () => {
     return () => unsub();
   }, []);
 
-  const handleAdminLogin = (e?: React.FormEvent, force = false) => {
-    if (e) e.preventDefault();
-    setAuthError('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-    if (force || (loginEmail.trim().toLowerCase() === 'superadmin@tickets.mv' && loginPass.trim() === 'admin123')) {
+  const handleAdminLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setAuthError('');
+    const email = loginEmail.trim().toLowerCase();
+    const pass = loginPass.trim();
+
+    if (!email || !pass) {
+      setAuthError('Please enter your Super Admin email and password.');
+      return;
+    }
+
+    if (email !== 'alippalhey@gmail.com') {
+      setAuthError('Access restricted. Only alippalhey@gmail.com has Super Admin privileges.');
+      return;
+    }
+
+    setIsSubmitting(true);
+    try {
+      if (isSupabaseConfigured()) {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email,
+          password: pass
+        });
+
+        if (error || !data.user) {
+          setAuthError(error?.message || 'Invalid Super Admin credentials.');
+          setIsSubmitting(false);
+          return;
+        }
+      }
+
       sessionStorage.setItem('mv_superadmin_auth', 'true');
       setIsAuthenticated(true);
-    } else if (loginEmail.trim() && loginPass.trim()) {
-      // Allow flexible demo pass
-      sessionStorage.setItem('mv_superadmin_auth', 'true');
-      setIsAuthenticated(true);
-    } else {
-      setAuthError('Please enter valid Super Admin credentials. Hint: superadmin@tickets.mv / admin123');
+    } catch (err: any) {
+      setAuthError(err.message || 'Login failed. Please check credentials.');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -102,7 +129,7 @@ export const SuperAdminPage: React.FC = () => {
                 required
                 value={loginEmail}
                 onChange={(e) => setLoginEmail(e.target.value)}
-                placeholder="superadmin@tickets.mv"
+                placeholder="alippalhey@gmail.com"
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-purple-400"
               />
             </div>
@@ -110,7 +137,7 @@ export const SuperAdminPage: React.FC = () => {
 
           <div>
             <label className="block text-xs font-bold text-slate-300 mb-1.5">
-              Master Passkey
+              Password
             </label>
             <div className="relative">
               <KeyRound className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
@@ -119,7 +146,7 @@ export const SuperAdminPage: React.FC = () => {
                 required
                 value={loginPass}
                 onChange={(e) => setLoginPass(e.target.value)}
-                placeholder="•••••••• (Default: admin123)"
+                placeholder="••••••••"
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-purple-400"
               />
             </div>
@@ -127,21 +154,11 @@ export const SuperAdminPage: React.FC = () => {
 
           <button
             type="submit"
-            className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-400 hover:to-indigo-400 text-white font-bold text-xs shadow-lg shadow-purple-500/25 transition active:scale-95"
+            disabled={isSubmitting}
+            className="w-full py-3 rounded-xl bg-gradient-to-r from-purple-500 to-indigo-500 hover:from-purple-400 hover:to-indigo-400 text-white font-bold text-xs shadow-lg shadow-purple-500/25 transition active:scale-95 disabled:opacity-50"
           >
-            Access Super Admin Dashboard →
+            {isSubmitting ? 'Verifying Super Admin...' : 'Access Super Admin Dashboard →'}
           </button>
-
-          {/* Quick Demo Access Button */}
-          <div className="pt-3 border-t border-slate-800 text-center">
-            <button
-              type="button"
-              onClick={() => handleAdminLogin(undefined, true)}
-              className="text-xs font-semibold text-purple-400 hover:text-purple-300 underline"
-            >
-              ⚡ 1-Click Quick Demo Login as Super Admin
-            </button>
-          </div>
         </form>
 
         <div className="text-center pt-2">
