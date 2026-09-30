@@ -24,7 +24,7 @@ export interface TenantBranding {
   bankDetails?: BankDetails;
 }
 
-export type SubscriptionModel = 'weekly' | 'monthly' | 'one_month' | 'free_trial';
+export type SubscriptionModel = 'weekly' | 'monthly' | 'yearly' | 'one_month' | 'free_trial';
 
 export interface Tenant {
   id: string;
@@ -34,8 +34,8 @@ export interface Tenant {
   tier: TenantTier;
   status: TenantStatus;
   branding: TenantBranding;
-  subscriptionModel: SubscriptionModel; // 'weekly' | 'monthly' | 'one_month' | 'free_trial'
-  subscriptionPriceMvr: number; // e.g. 149 for weekly, 499 for monthly, 550 for one_month
+  subscriptionModel: SubscriptionModel; // 'weekly' | 'monthly' | 'yearly' | 'free_trial'
+  subscriptionPriceMvr: number; // e.g. 149 for weekly, 499 for monthly, 1000 for yearly
   subscriptionBillingDate?: string;
   createdAt: string;
   ownerEmail: string;
@@ -51,7 +51,7 @@ export interface TenantRegistrationRequest {
   contactPerson: string;
   contactPhone: string;
   contactEmail: string;
-  subscriptionPlan: 'weekly' | 'monthly' | 'one_month';
+  subscriptionPlan: 'weekly' | 'monthly' | 'yearly' | 'one_month';
   subscriptionPriceMvr: number;
   paymentMethod: 'bml_transfer' | 'bml_gateway' | 'mfaisaa' | 'cash';
   paymentSlipUrl?: string;

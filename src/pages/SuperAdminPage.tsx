@@ -182,12 +182,12 @@ export const SuperAdminPage: React.FC = () => {
   const activeTenantsCount = tenants.filter((t) => t.status === 'active').length;
   const activeHallsCount = halls.length;
 
-  // Change Subscription Model (Weekly, Monthly, or One Month Only)
+  // Change Subscription Model (Weekly, Monthly, or 1-Year Pass)
   const handleSetSubscription = (tenant: Tenant, model: SubscriptionModel) => {
     let price = 499;
     if (model === 'weekly') price = 149;
     if (model === 'monthly') price = 499;
-    if (model === 'one_month') price = 550;
+    if (model === 'yearly' || model === 'one_month') price = 1000;
     if (model === 'free_trial') price = 0;
 
     cinemaStore.updateTenantSubscription(tenant.id, model, price);
@@ -282,7 +282,7 @@ export const SuperAdminPage: React.FC = () => {
             <DollarSign className="w-4 h-4 text-emerald-400" />
           </div>
           <p className="text-2xl font-bold text-white font-mono">{formatCurrency(totalSubscriptionRevenueMVR)}</p>
-          <p className="text-[11px] text-emerald-400 font-medium">Weekly, Monthly & 1-Month Plans (0% Ticket Fee)</p>
+          <p className="text-[11px] text-emerald-400 font-medium">Weekly, Monthly & 1-Year Plans (0% Ticket Fee)</p>
         </div>
 
         <div className="glass-panel rounded-2xl p-5 border border-slate-800 space-y-2">
@@ -467,7 +467,7 @@ export const SuperAdminPage: React.FC = () => {
                         : 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
                     }`}>
                       {tenant.subscriptionModel === 'weekly' ? 'Weekly (MVR 149/wk)' :
-                       tenant.subscriptionModel === 'one_month' ? 'One Month Only (MVR 550)' :
+                       tenant.subscriptionModel === 'yearly' || tenant.subscriptionModel === 'one_month' ? '1-Year Pass (MVR 1,000/yr)' :
                        tenant.subscriptionModel === 'monthly' ? 'Monthly (MVR 499/mo)' :
                        'Free Plan (MVR 0)'}
                     </span>
@@ -516,14 +516,14 @@ export const SuperAdminPage: React.FC = () => {
                       Monthly (499)
                     </button>
                     <button
-                      onClick={() => handleSetSubscription(tenant, 'one_month')}
+                      onClick={() => handleSetSubscription(tenant, 'yearly')}
                       className={`px-2 py-1.5 rounded-lg text-[10px] font-bold border transition text-center ${
-                        tenant.subscriptionModel === 'one_month'
+                        tenant.subscriptionModel === 'yearly' || tenant.subscriptionModel === 'one_month'
                           ? 'bg-teal-500 text-slate-950 border-teal-400 font-extrabold shadow-sm'
                           : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
                       }`}
                     >
-                      1-Month (550)
+                      1-Year (1000)
                     </button>
                   </div>
 
@@ -575,7 +575,7 @@ export const SuperAdminPage: React.FC = () => {
                   <th className="px-5 py-4">Sublink Slug</th>
                   <th className="px-5 py-4">Island & Atoll</th>
                   <th className="px-5 py-4">Current Subscription</th>
-                  <th className="px-5 py-4">Change Model (Weekly / Monthly / 1-Month)</th>
+                  <th className="px-5 py-4">Change Model (Weekly / Monthly / 1-Year)</th>
                   <th className="px-5 py-4">Status</th>
                   <th className="px-5 py-4 text-right">Actions</th>
                 </tr>
@@ -623,7 +623,7 @@ export const SuperAdminPage: React.FC = () => {
                               : 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
                           }`}>
                             {tenant.subscriptionModel === 'weekly' ? 'Weekly (MVR 149/wk)' :
-                             tenant.subscriptionModel === 'one_month' ? 'One Month Only (MVR 550)' :
+                             tenant.subscriptionModel === 'yearly' || tenant.subscriptionModel === 'one_month' ? '1-Year Pass (MVR 1,000/yr)' :
                              tenant.subscriptionModel === 'monthly' ? 'Monthly (MVR 499/mo)' :
                              'Free Plan (MVR 0)'}
                           </span>
@@ -676,14 +676,14 @@ export const SuperAdminPage: React.FC = () => {
                             Monthly (499)
                           </button>
                           <button
-                            onClick={() => handleSetSubscription(tenant, 'one_month')}
+                            onClick={() => handleSetSubscription(tenant, 'yearly')}
                             className={`px-2 py-1 rounded text-[10px] font-bold border transition ${
-                              tenant.subscriptionModel === 'one_month'
+                              tenant.subscriptionModel === 'yearly' || tenant.subscriptionModel === 'one_month'
                                 ? 'bg-teal-500 text-slate-950 border-teal-400 shadow-sm'
                                 : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                             }`}
                           >
-                            1-Month (550)
+                            1-Year (1000)
                           </button>
 
                           {tenant.tier === 'paid' && (

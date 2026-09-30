@@ -56,9 +56,9 @@ const INITIAL_TENANTS: Tenant[] = [
     tier: 'paid',
     status: 'active',
     ownerEmail: 'council@velidhoo.gov.mv',
-    subscriptionModel: 'one_month', // One Month Only pass
-    subscriptionPriceMvr: 550,
-    subscriptionBillingDate: new Date(Date.now() + 14 * 86400000).toISOString(),
+    subscriptionModel: 'yearly', // 1-Year Annual Pass
+    subscriptionPriceMvr: 1000,
+    subscriptionBillingDate: new Date(Date.now() + 300 * 86400000).toISOString(),
     createdAt: new Date(Date.now() - 15 * 86400000).toISOString(),
     branding: {
       logoUrl: 'https://images.unsplash.com/photo-1536440136628-849c177e76a1?w=200&h=200&fit=crop&q=80',
@@ -525,6 +525,11 @@ class MaldivianCinemaStore {
             t.ownerEmail = 'alippalheys@gmail.com';
             updated = true;
           }
+          if (t.subscriptionModel === 'one_month') {
+            t.subscriptionModel = 'yearly';
+            t.subscriptionPriceMvr = 1000;
+            updated = true;
+          }
         });
         if (updated) {
           localStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(list));
@@ -575,13 +580,13 @@ class MaldivianCinemaStore {
 
   public updateTenantSubscription(
     tenantId: string, 
-    model: 'weekly' | 'monthly' | 'one_month' | 'free_trial', 
+    model: 'weekly' | 'monthly' | 'yearly' | 'one_month' | 'free_trial', 
     priceMvr?: number
   ): void {
     const list = this.getTenants();
     const tenant = list.find((t) => t.id === tenantId);
     if (tenant) {
-      tenant.subscriptionModel = model;
+      tenant.subscriptionModel = (model === 'one_month' ? 'yearly' : model) as any;
       tenant.tier = model === 'free_trial' ? 'free' : 'paid';
 
       if (priceMvr !== undefined) {
@@ -589,11 +594,11 @@ class MaldivianCinemaStore {
       } else {
         if (model === 'weekly') tenant.subscriptionPriceMvr = 149;
         else if (model === 'monthly') tenant.subscriptionPriceMvr = 499;
-        else if (model === 'one_month') tenant.subscriptionPriceMvr = 550;
+        else if (model === 'yearly' || model === 'one_month') tenant.subscriptionPriceMvr = 1000;
         else tenant.subscriptionPriceMvr = 0;
       }
 
-      const daysToAdd = model === 'weekly' ? 7 : 30;
+      const daysToAdd = model === 'weekly' ? 7 : (model === 'yearly' || model === 'one_month') ? 365 : 30;
       tenant.subscriptionBillingDate = new Date(Date.now() + daysToAdd * 86400000).toISOString();
       localStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(list));
       this.addLog({

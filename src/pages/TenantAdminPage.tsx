@@ -474,7 +474,7 @@ export const TenantAdminPage: React.FC = () => {
     let price = 499;
     if (model === 'weekly') price = 149;
     if (model === 'monthly') price = 499;
-    if (model === 'one_month') price = 550;
+    if (model === 'yearly' || model === 'one_month') price = 1000;
     if (model === 'free_trial') price = 0;
 
     cinemaStore.updateTenantSubscription(currentTenant.id, model, price);
@@ -1222,7 +1222,7 @@ export const TenantAdminPage: React.FC = () => {
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Current SaaS Plan:</span>
                 <span className="text-sm font-bold text-white">
                   {currentTenant.subscriptionModel === 'weekly' ? 'Weekly Plan (MVR 149 / wk)' :
-                   currentTenant.subscriptionModel === 'one_month' ? 'One Month Only (MVR 550)' :
+                   currentTenant.subscriptionModel === 'yearly' || currentTenant.subscriptionModel === 'one_month' ? '1-Year Annual Pass (MVR 1,000 / yr)' :
                    currentTenant.subscriptionModel === 'monthly' ? 'Monthly Plan (MVR 499 / mo)' :
                    'Free Plan (3-Day Free Trial / Fallback)'}
                 </span>
@@ -1269,14 +1269,14 @@ export const TenantAdminPage: React.FC = () => {
                 </button>
                 <button
                   type="button"
-                  onClick={() => handleSwitchSubscription('one_month')}
+                  onClick={() => handleSwitchSubscription('yearly')}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
-                    currentTenant.subscriptionModel === 'one_month'
+                    currentTenant.subscriptionModel === 'yearly' || currentTenant.subscriptionModel === 'one_month'
                       ? 'bg-teal-500 text-slate-950 border-teal-400 shadow-sm'
                       : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
                   }`}
                 >
-                  One Month Only (MVR 550)
+                  1-Year Pass (MVR 1,000)
                 </button>
               </div>
             </div>

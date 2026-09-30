@@ -35,7 +35,7 @@ export const HomePage: React.FC = () => {
     contactPerson: string;
     contactPhone: string;
     contactEmail: string;
-    subscriptionPlan: 'weekly' | 'monthly' | 'one_month';
+    subscriptionPlan: 'weekly' | 'monthly' | 'yearly' | 'one_month';
     paymentMethod: 'bml_transfer' | 'bml_gateway' | 'mfaisaa' | 'cash';
     notes: string;
   }>({
@@ -132,7 +132,7 @@ export const HomePage: React.FC = () => {
   // Handle in-app request submission
   const handleSubmitInApp = (e: React.FormEvent) => {
     e.preventDefault();
-    const price = reqForm.subscriptionPlan === 'weekly' ? 149 : reqForm.subscriptionPlan === 'one_month' ? 550 : 499;
+    const price = reqForm.subscriptionPlan === 'weekly' ? 149 : (reqForm.subscriptionPlan === 'yearly' || reqForm.subscriptionPlan === 'one_month') ? 1000 : 499;
     const req = cinemaStore.createTenantRequest({
       cinemaName: reqForm.cinemaName,
       atoll: reqForm.atoll,
@@ -140,7 +140,7 @@ export const HomePage: React.FC = () => {
       contactPerson: reqForm.contactPerson,
       contactPhone: reqForm.contactPhone,
       contactEmail: reqForm.contactEmail,
-      subscriptionPlan: reqForm.subscriptionPlan,
+      subscriptionPlan: (reqForm.subscriptionPlan === 'one_month' ? 'yearly' : reqForm.subscriptionPlan) as any,
       subscriptionPriceMvr: price,
       paymentMethod: reqForm.paymentMethod,
       channel: 'in_app',
@@ -151,7 +151,7 @@ export const HomePage: React.FC = () => {
 
   // Handle WhatsApp request
   const handleSendWhatsApp = () => {
-    const price = reqForm.subscriptionPlan === 'weekly' ? 149 : reqForm.subscriptionPlan === 'one_month' ? 550 : 499;
+    const price = reqForm.subscriptionPlan === 'weekly' ? 149 : (reqForm.subscriptionPlan === 'yearly' || reqForm.subscriptionPlan === 'one_month') ? 1000 : 499;
     const code = `TEN-${(reqForm.island || 'ISL').substring(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`;
     cinemaStore.createTenantRequest({
       cinemaName: reqForm.cinemaName || 'New Cinema Organizer',
@@ -160,7 +160,7 @@ export const HomePage: React.FC = () => {
       contactPerson: reqForm.contactPerson || 'Organizer',
       contactPhone: reqForm.contactPhone || '+960',
       contactEmail: reqForm.contactEmail || 'organizer@cinema.mv',
-      subscriptionPlan: reqForm.subscriptionPlan,
+      subscriptionPlan: (reqForm.subscriptionPlan === 'one_month' ? 'yearly' : reqForm.subscriptionPlan) as any,
       subscriptionPriceMvr: price,
       paymentMethod: reqForm.paymentMethod,
       channel: 'whatsapp',
@@ -184,7 +184,7 @@ export const HomePage: React.FC = () => {
 
   // Handle Telegram request
   const handleSendTelegram = () => {
-    const price = reqForm.subscriptionPlan === 'weekly' ? 149 : reqForm.subscriptionPlan === 'one_month' ? 550 : 499;
+    const price = reqForm.subscriptionPlan === 'weekly' ? 149 : (reqForm.subscriptionPlan === 'yearly' || reqForm.subscriptionPlan === 'one_month') ? 1000 : 499;
     const code = `TEN-${(reqForm.island || 'ISL').substring(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`;
     cinemaStore.createTenantRequest({
       cinemaName: reqForm.cinemaName || 'New Cinema Organizer',
@@ -193,7 +193,7 @@ export const HomePage: React.FC = () => {
       contactPerson: reqForm.contactPerson || 'Organizer',
       contactPhone: reqForm.contactPhone || '+960',
       contactEmail: reqForm.contactEmail || 'organizer@cinema.mv',
-      subscriptionPlan: reqForm.subscriptionPlan,
+      subscriptionPlan: (reqForm.subscriptionPlan === 'one_month' ? 'yearly' : reqForm.subscriptionPlan) as any,
       subscriptionPriceMvr: price,
       paymentMethod: reqForm.paymentMethod,
       channel: 'telegram',
@@ -579,7 +579,7 @@ export const HomePage: React.FC = () => {
                 <span>Send Request with Payment of Your Choice:</span>
               </h3>
               <p className="text-xs text-slate-400">
-                Choose Weekly (MVR 149), Monthly (MVR 499), or 1-Month (MVR 550). Submit through our app, or send directly via WhatsApp or Telegram.
+                Choose Weekly (MVR 149), Monthly (MVR 499), or 1-Year Pass (MVR 1,000). Submit through our app, or send directly via WhatsApp or Telegram.
               </p>
 
               <div className="pt-2 flex flex-wrap gap-4 text-xs font-semibold text-slate-200">
@@ -807,15 +807,15 @@ export const HomePage: React.FC = () => {
 
                     <button
                       type="button"
-                      onClick={() => setReqForm({ ...reqForm, subscriptionPlan: 'one_month' })}
+                      onClick={() => setReqForm({ ...reqForm, subscriptionPlan: 'yearly' })}
                       className={`p-2.5 rounded-xl border text-center transition ${
-                        reqForm.subscriptionPlan === 'one_month'
+                        reqForm.subscriptionPlan === 'yearly' || reqForm.subscriptionPlan === 'one_month'
                           ? 'bg-teal-500 text-slate-950 font-bold border-teal-400 shadow-md'
                           : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
                       }`}
                     >
-                      <div className="text-xs font-bold">1-Month</div>
-                      <div className="text-[10px] font-mono">MVR 550</div>
+                      <div className="text-xs font-bold">1-Year Pass</div>
+                      <div className="text-[10px] font-mono">MVR 1,000</div>
                     </button>
                   </div>
                 </div>

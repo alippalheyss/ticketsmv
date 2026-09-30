@@ -19,7 +19,7 @@ export const AdminHubPage: React.FC = () => {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [isFreeTrialModalOpen, setIsFreeTrialModalOpen] = useState(false);
-  const [selectedPlanForRegister, setSelectedPlanForRegister] = useState<'weekly' | 'monthly' | 'one_month'>('monthly');
+  const [selectedPlanForRegister, setSelectedPlanForRegister] = useState<'weekly' | 'monthly' | 'yearly' | 'one_month'>('monthly');
 
   // Free trial form state (free user with limitations)
   const [trialCinemaName, setTrialCinemaName] = useState('');
@@ -199,7 +199,7 @@ export const AdminHubPage: React.FC = () => {
     navigate('/tenant-admin');
   };
 
-  const handleOpenRegister = (plan: 'weekly' | 'monthly' | 'one_month' = 'monthly') => {
+  const handleOpenRegister = (plan: 'weekly' | 'monthly' | 'yearly' | 'one_month' = 'monthly') => {
     setSelectedPlanForRegister(plan);
     setRegistrationSubmitted(null);
     setIsRegisterModalOpen(true);
@@ -211,7 +211,7 @@ export const AdminHubPage: React.FC = () => {
 
     const prefix = cinemaName.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase() || 'CIN';
     const genCode = `${prefix}-${Math.floor(10 + Math.random() * 89)}`;
-    const price = selectedPlanForRegister === 'weekly' ? 149 : selectedPlanForRegister === 'one_month' ? 550 : 499;
+    const price = selectedPlanForRegister === 'weekly' ? 149 : (selectedPlanForRegister === 'yearly' || selectedPlanForRegister === 'one_month') ? 1000 : 499;
 
     const req = cinemaStore.createTenantRequest({
       cinemaName,
@@ -220,7 +220,7 @@ export const AdminHubPage: React.FC = () => {
       contactPhone: ownerPhone,
       island: island || 'Malé',
       atoll: atoll || 'Kaafu',
-      subscriptionPlan: selectedPlanForRegister,
+      subscriptionPlan: (selectedPlanForRegister === 'one_month' ? 'yearly' : selectedPlanForRegister) as any,
       subscriptionPriceMvr: price,
       paymentMethod: chosenPaymentMethod,
       channel: 'in_app',
@@ -704,47 +704,47 @@ export const AdminHubPage: React.FC = () => {
             </button>
           </div>
 
-          {/* Plan 3: 1-Month Pass */}
+          {/* Plan 3: 1-Year Annual Pass */}
           <div className="glass-panel rounded-3xl p-6 border border-slate-800 hover:border-slate-700 flex flex-col justify-between space-y-6 transition">
             <div className="space-y-4">
               <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30">
-                1-Month Single Pass
+                1-Year Annual Pass
               </span>
               <div>
                 <div className="flex items-baseline space-x-1">
-                  <span className="text-3xl font-black text-white">MVR 550</span>
-                  <span className="text-xs text-slate-400">/ 30 days</span>
+                  <span className="text-3xl font-black text-white">MVR 1,000</span>
+                  <span className="text-xs text-slate-400">/ year</span>
                 </div>
                 <p className="text-xs text-slate-400 mt-1">
-                  One-time single month pass. No renewal lock-in, perfect for seasonal theatrical windows.
+                  Full 12-month cinema management pass. Best long-term value for permanent theaters, island halls, and festival organizers.
                 </p>
               </div>
 
               <ul className="space-y-2.5 text-xs text-slate-300 pt-2 border-t border-slate-800/80">
                 <li className="flex items-center space-x-2">
                   <Check className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>All Monthly Features Included</span>
+                  <span>All Multi-Screen & Hall Features</span>
                 </li>
                 <li className="flex items-center space-x-2">
                   <Check className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>Zero Auto-Renewals or Commitments</span>
+                  <span>Full 365 Days Access (Highest Savings)</span>
                 </li>
                 <li className="flex items-center space-x-2">
                   <Check className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>Door Scanner & Slip Approval System</span>
+                  <span>Custom Subdomain & Direct BML Slips</span>
                 </li>
                 <li className="flex items-center space-x-2">
                   <Check className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>Unique Uppercase Tenant Code</span>
+                  <span>Unlimited Door Staff QR Validations</span>
                 </li>
               </ul>
             </div>
 
             <button
-              onClick={() => handleOpenRegister('one_month')}
+              onClick={() => handleOpenRegister('yearly')}
               className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-700 transition active:scale-95"
             >
-              Get Started with 1-Month Pass →
+              Get Started with 1-Year Pass →
             </button>
           </div>
         </div>
@@ -969,15 +969,15 @@ export const AdminHubPage: React.FC = () => {
 
                       <button
                         type="button"
-                        onClick={() => setSelectedPlanForRegister('one_month')}
+                        onClick={() => setSelectedPlanForRegister('yearly')}
                         className={`p-2.5 rounded-xl border text-center transition ${
-                          selectedPlanForRegister === 'one_month'
+                          selectedPlanForRegister === 'yearly' || selectedPlanForRegister === 'one_month'
                             ? 'bg-teal-500/20 border-teal-500 text-white font-bold'
                             : 'bg-slate-950 border-slate-800 text-slate-400'
                         }`}
                       >
-                        <div className="text-[11px]">1-Month</div>
-                        <div className="text-xs font-extrabold text-amber-300">MVR 550</div>
+                        <div className="text-[11px]">1-Year</div>
+                        <div className="text-xs font-extrabold text-amber-300">MVR 1,000</div>
                       </button>
                     </div>
                   </div>
