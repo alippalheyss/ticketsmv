@@ -1,0 +1,19 @@
+{
+  "name": "Tickets.mv - Maldivian Cinema & Movie Booking",
+  "short_name": "Tickets.mv",
+  "description": "Multi-Tenant Maldivian Movie Ticketing Platform (PWA)",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0a0f1d",
+  "theme_color": "#0f766e",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "/cinema-icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["entertainment", "tickets", "movies"]
+}

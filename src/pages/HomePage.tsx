@@ -1,0 +1,918 @@
+import React, { useState, useEffect } from 'react';
+import { Link } from 'react-router-dom';
+import { cinemaStore } from '../services/store';
+import { Movie, Showtime, Tenant, Hall, Screen, TenantRegistrationRequest } from '../types';
+import { useLanguage } from '../context/LanguageContext';
+import { 
+  Film, Sparkles, MapPin, Calendar, Clock, Ticket, Search, 
+  Play, Shield, Star, ChevronRight, Building2, Phone, Mail, 
+  MessageCircle, CheckCircle2, ArrowRight, Send, Plus, KeyRound, Check, X,
+  Compass, Globe
+} from 'lucide-react';
+
+export const HomePage: React.FC = () => {
+  const { t, formatCurrency, isDhivehi } = useLanguage();
+  const [movies, setMovies] = useState<Movie[]>([]);
+  const [showtimes, setShowtimes] = useState<Showtime[]>([]);
+  const [tenants, setTenants] = useState<Tenant[]>([]);
+  const [halls, setHalls] = useState<Hall[]>([]);
+  const [screens, setScreens] = useState<Screen[]>([]);
+
+  // Filtering states: Atoll and Island
+  const [selectedAtoll, setSelectedAtoll] = useState<string>('all');
+  const [selectedIsland, setSelectedIsland] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [selectedMovieForTrailer, setSelectedMovieForTrailer] = useState<Movie | null>(null);
+
+  // Onboarding Request Modal State
+  const [showOnboardingModal, setShowOnboardingModal] = useState(false);
+  const [submittedReq, setSubmittedReq] = useState<TenantRegistrationRequest | null>(null);
+  const [reqForm, setReqForm] = useState<{
+    cinemaName: string;
+    atoll: string;
+    island: string;
+    contactPerson: string;
+    contactPhone: string;
+    contactEmail: string;
+    subscriptionPlan: 'weekly' | 'monthly' | 'one_month';
+    paymentMethod: 'bml_transfer' | 'bml_gateway' | 'mfaisaa' | 'cash';
+    notes: string;
+  }>({
+    cinemaName: '',
+    atoll: 'Kaafu (K)',
+    island: '',
+    contactPerson: '',
+    contactPhone: '',
+    contactEmail: '',
+    subscriptionPlan: 'monthly',
+    paymentMethod: 'bml_transfer',
+    notes: ''
+  });
+
+  useEffect(() => {
+    setMovies(cinemaStore.getMovies());
+    setShowtimes(cinemaStore.getShowtimes());
+    setTenants(cinemaStore.getTenants());
+    setHalls(cinemaStore.getHalls());
+    setScreens(cinemaStore.getScreens());
+
+    const unsub = cinemaStore.subscribe(() => {
+      setMovies(cinemaStore.getMovies());
+      setShowtimes(cinemaStore.getShowtimes());
+      setTenants(cinemaStore.getTenants());
+      setHalls(cinemaStore.getHalls());
+      setScreens(cinemaStore.getScreens());
+    });
+    return () => unsub();
+  }, []);
+
+  // Unique list of Atolls from registered cinema organizers
+  const atolls = Array.from(
+    new Set(
+      tenants
+        .map((t) => t.branding.atoll)
+        .filter((atoll): atoll is string => Boolean(atoll && atoll.trim()))
+    )
+  ).sort();
+
+  // Cascading Islands: if an Atoll is chosen, show only islands in that Atoll
+  const availableIslands = Array.from(
+    new Set(
+      tenants
+        .filter((t) => selectedAtoll === 'all' || t.branding.atoll === selectedAtoll)
+        .map((t) => t.branding.island)
+        .filter((island): island is string => Boolean(island && island.trim()))
+    )
+  ).sort();
+
+  const handleAtollChange = (atoll: string) => {
+    setSelectedAtoll(atoll);
+    setSelectedIsland('all'); // Reset island filter when atoll changes
+  };
+
+  // Filtered movies based on Search, Atoll, and Island
+  const filteredMovies = movies.filter((movie) => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      const matchTitleEn = movie.titleEn.toLowerCase().includes(q);
+      const matchTitleDv = movie.titleDv.toLowerCase().includes(q);
+      const matchGenre = movie.genre.some((g) => g.toLowerCase().includes(q));
+      if (!matchTitleEn && !matchTitleDv && !matchGenre) return false;
+    }
+
+    const movieShowtimes = showtimes.filter((s) => s.movieId === movie.id);
+
+    if (selectedAtoll !== 'all') {
+      const matchesAtoll = movieShowtimes.some((s) => {
+        const tenant = tenants.find((t) => t.id === s.tenantId);
+        return tenant?.branding.atoll === selectedAtoll;
+      });
+      if (!matchesAtoll) return false;
+    }
+
+    if (selectedIsland !== 'all') {
+      const matchesIsland = movieShowtimes.some((s) => {
+        const tenant = tenants.find((t) => t.id === s.tenantId);
+        return tenant?.branding.island === selectedIsland;
+      });
+      if (!matchesIsland) return false;
+    }
+
+    return true;
+  });
+
+  // Handle in-app request submission
+  const handleSubmitInApp = (e: React.FormEvent) => {
+    e.preventDefault();
+    const price = reqForm.subscriptionPlan === 'weekly' ? 149 : reqForm.subscriptionPlan === 'one_month' ? 550 : 499;
+    const req = cinemaStore.createTenantRequest({
+      cinemaName: reqForm.cinemaName,
+      atoll: reqForm.atoll,
+      island: reqForm.island,
+      contactPerson: reqForm.contactPerson,
+      contactPhone: reqForm.contactPhone,
+      contactEmail: reqForm.contactEmail,
+      subscriptionPlan: reqForm.subscriptionPlan,
+      subscriptionPriceMvr: price,
+      paymentMethod: reqForm.paymentMethod,
+      channel: 'in_app',
+      notes: reqForm.notes
+    });
+    setSubmittedReq(req);
+  };
+
+  // Handle WhatsApp request
+  const handleSendWhatsApp = () => {
+    const price = reqForm.subscriptionPlan === 'weekly' ? 149 : reqForm.subscriptionPlan === 'one_month' ? 550 : 499;
+    const code = `TEN-${(reqForm.island || 'ISL').substring(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`;
+    cinemaStore.createTenantRequest({
+      cinemaName: reqForm.cinemaName || 'New Cinema Organizer',
+      atoll: reqForm.atoll,
+      island: reqForm.island || 'Maldives',
+      contactPerson: reqForm.contactPerson || 'Organizer',
+      contactPhone: reqForm.contactPhone || '+960',
+      contactEmail: reqForm.contactEmail || 'organizer@cinema.mv',
+      subscriptionPlan: reqForm.subscriptionPlan,
+      subscriptionPriceMvr: price,
+      paymentMethod: reqForm.paymentMethod,
+      channel: 'whatsapp',
+      tenantCode: code,
+      notes: reqForm.notes
+    });
+
+    const text = encodeURIComponent(
+      `*Tickets.mv Cinema Organizer Onboarding Request*\n` +
+      `Tenant Code: ${code}\n` +
+      `Cinema / Hall: ${reqForm.cinemaName || 'New Cinema'}\n` +
+      `Location: ${reqForm.atoll} - ${reqForm.island}\n` +
+      `Contact: ${reqForm.contactPerson} (${reqForm.contactPhone})\n` +
+      `Email: ${reqForm.contactEmail}\n` +
+      `SaaS Plan: ${reqForm.subscriptionPlan.toUpperCase()} (MVR ${price})\n` +
+      `Payment Choice: ${reqForm.paymentMethod.replace('_', ' ').toUpperCase()}\n` +
+      `Notes: ${reqForm.notes || 'Ready to onboard'}`
+    );
+    window.open(`https://wa.me/9607771234?text=${text}`, '_blank');
+  };
+
+  // Handle Telegram request
+  const handleSendTelegram = () => {
+    const price = reqForm.subscriptionPlan === 'weekly' ? 149 : reqForm.subscriptionPlan === 'one_month' ? 550 : 499;
+    const code = `TEN-${(reqForm.island || 'ISL').substring(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`;
+    cinemaStore.createTenantRequest({
+      cinemaName: reqForm.cinemaName || 'New Cinema Organizer',
+      atoll: reqForm.atoll,
+      island: reqForm.island || 'Maldives',
+      contactPerson: reqForm.contactPerson || 'Organizer',
+      contactPhone: reqForm.contactPhone || '+960',
+      contactEmail: reqForm.contactEmail || 'organizer@cinema.mv',
+      subscriptionPlan: reqForm.subscriptionPlan,
+      subscriptionPriceMvr: price,
+      paymentMethod: reqForm.paymentMethod,
+      channel: 'telegram',
+      tenantCode: code,
+      notes: reqForm.notes
+    });
+
+    const text = encodeURIComponent(
+      `Tickets.mv Organizer Request - Code: ${code} - ${reqForm.cinemaName} (${reqForm.island}) - Plan: ${reqForm.subscriptionPlan} - Payment: ${reqForm.paymentMethod}`
+    );
+    window.open(`https://t.me/TicketsMVAdmin?text=${text}`, '_blank');
+  };
+
+  return (
+    <div className="space-y-10 pb-16">
+      {/* Hero Showcase with Maldivian Cinema Aesthetic */}
+      <section className="relative overflow-hidden pt-6 sm:pt-10 pb-10 px-4 sm:px-6 lg:px-8">
+        <div className="absolute inset-0 z-0 opacity-25 pointer-events-none">
+          <div className="absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[350px] bg-teal-500/20 rounded-full blur-[100px]" />
+          <div className="absolute top-1/3 right-1/4 w-[350px] h-[250px] bg-cyan-500/15 rounded-full blur-[90px]" />
+        </div>
+
+        <div className="relative z-10 max-w-4xl mx-auto text-center space-y-5">
+          <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-teal-500/10 border border-teal-500/30 text-teal-300 text-xs font-semibold backdrop-blur-md">
+            <Sparkles className="w-3.5 h-3.5 text-teal-400" />
+            <span>{t('hero.badge')}</span>
+          </div>
+
+          <h1 className={`text-2xl sm:text-4xl lg:text-5xl font-extrabold tracking-tight text-white leading-tight ${isDhivehi ? 'font-dhivehi leading-normal' : ''}`}>
+            {t('hero.title')}
+          </h1>
+
+          <p className={`text-sm sm:text-base text-slate-300 max-w-2xl mx-auto leading-relaxed ${isDhivehi ? 'font-dhivehi' : ''}`}>
+            {t('hero.desc')}
+          </p>
+
+          {/* Mobile-First Search, Atoll & Island Filter Box */}
+          <div className="pt-2 max-w-3xl mx-auto space-y-3">
+            <div className="glass-panel p-3 rounded-2xl flex flex-col sm:flex-row items-center gap-2.5 shadow-2xl border border-slate-800">
+              {/* Keyword Search */}
+              <div className="relative flex-1 w-full">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
+                <input
+                  type="text"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  placeholder={t('search.placeholder')}
+                  className={`w-full pl-10 pr-4 py-2 rounded-xl bg-slate-900/90 text-xs sm:text-sm text-white placeholder:text-slate-500 border border-slate-700/60 focus:outline-none focus:border-teal-400 ${isDhivehi ? 'font-dhivehi pr-10 pl-4' : ''}`}
+                />
+              </div>
+
+              {/* 1. Atoll Selector Dropdown */}
+              <div className="relative w-full sm:w-auto">
+                <Compass className="w-4 h-4 text-teal-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <select
+                  value={selectedAtoll}
+                  onChange={(e) => handleAtollChange(e.target.value)}
+                  className="w-full sm:w-auto pl-9 pr-4 py-2 rounded-xl bg-slate-800 text-xs font-bold text-teal-300 border border-slate-700 focus:outline-none focus:border-teal-400 cursor-pointer"
+                >
+                  <option value="all">All Atolls (ހުރިހާ އަތޮޅު)</option>
+                  {atolls.map((atoll) => (
+                    <option key={atoll} value={atoll}>
+                      {atoll}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* 2. Island Selector Dropdown */}
+              <div className="relative w-full sm:w-auto">
+                <MapPin className="w-4 h-4 text-cyan-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <select
+                  value={selectedIsland}
+                  onChange={(e) => setSelectedIsland(e.target.value)}
+                  className="w-full sm:w-auto pl-9 pr-4 py-2 rounded-xl bg-slate-800 text-xs font-bold text-cyan-300 border border-slate-700 focus:outline-none focus:border-teal-400 cursor-pointer"
+                >
+                  <option value="all">All Islands (ހުރިހާ ރަށް)</option>
+                  {availableIslands.map((isle) => (
+                    <option key={isle} value={isle}>
+                      {isle}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Quick Atoll & Island Filter Pills - Zero Scroll Wrap */}
+            <div className="space-y-2 pt-1">
+              {/* Atoll quick selection */}
+              <div className="flex flex-wrap items-center justify-center gap-1.5 text-xs">
+                <span className="text-[11px] font-bold text-slate-400 mr-1 flex items-center">
+                  <Compass className="w-3.5 h-3.5 mr-1 text-teal-400 inline" />
+                  Atoll:
+                </span>
+                <button
+                  onClick={() => handleAtollChange('all')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition flex items-center space-x-1 ${
+                    selectedAtoll === 'all'
+                      ? 'bg-teal-500 text-slate-950 font-bold shadow-sm'
+                      : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <Compass className="w-3 h-3" />
+                  <span>All Atolls</span>
+                </button>
+                {atolls.map((atoll) => (
+                  <button
+                    key={atoll}
+                    onClick={() => handleAtollChange(atoll)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition ${
+                      selectedAtoll === atoll
+                        ? 'bg-teal-500 text-slate-950 font-bold shadow-sm'
+                        : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    {atoll}
+                  </button>
+                ))}
+              </div>
+
+              {/* Island quick selection */}
+              <div className="flex flex-wrap items-center justify-center gap-1.5 text-xs">
+                <span className="text-[11px] font-bold text-slate-400 mr-1 flex items-center">
+                  <MapPin className="w-3.5 h-3.5 mr-1 text-cyan-400 inline" />
+                  Island:
+                </span>
+                <button
+                  onClick={() => setSelectedIsland('all')}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition flex items-center space-x-1 ${
+                    selectedIsland === 'all'
+                      ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
+                      : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'
+                  }`}
+                >
+                  <MapPin className="w-3 h-3" />
+                  <span>All Islands</span>
+                </button>
+                {availableIslands.map((isle) => (
+                  <button
+                    key={isle}
+                    onClick={() => setSelectedIsland(isle)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition flex items-center space-x-1 ${
+                      selectedIsland === isle
+                        ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
+                        : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'
+                    }`}
+                  >
+                    <MapPin className="w-3 h-3" />
+                    <span>{isle}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* Now Showing Movies Section (Mobile-First Card Layout) */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+        <div className="flex items-center justify-between mb-4">
+          <div>
+            <h2 className="text-xl sm:text-2xl font-bold text-white flex items-center space-x-2">
+              <Film className="w-5 h-5 text-teal-400" />
+              <span>{t('nav.movies')}</span>
+            </h2>
+            <p className="text-xs text-slate-400 mt-0.5">
+              Select showtime to view hall layout & pick seats ({filteredMovies.length} movies available)
+            </p>
+          </div>
+
+          {(selectedAtoll !== 'all' || selectedIsland !== 'all' || searchQuery) && (
+            <button
+              onClick={() => {
+                setSelectedAtoll('all');
+                setSelectedIsland('all');
+                setSearchQuery('');
+              }}
+              className="text-xs text-teal-400 hover:underline font-bold"
+            >
+              Reset Filters
+            </button>
+          )}
+        </div>
+
+        {filteredMovies.length === 0 ? (
+          <div className="glass-panel rounded-3xl p-10 text-center border border-slate-800 space-y-3">
+            <Film className="w-12 h-12 text-slate-600 mx-auto" />
+            <h3 className="text-base font-bold text-white">No Movies Found in Selected Island / Atoll</h3>
+            <p className="text-xs text-slate-400 max-w-md mx-auto">
+              There are currently no active screenings matching your selected filters. Try choosing "All Atolls" or another island.
+            </p>
+            <button
+              onClick={() => {
+                setSelectedAtoll('all');
+                setSelectedIsland('all');
+                setSearchQuery('');
+              }}
+              className="px-4 py-2 rounded-xl bg-teal-500 text-slate-950 font-bold text-xs"
+            >
+              Show All Island Screenings
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredMovies.map((movie) => {
+              const movieShowtimes = showtimes.filter((s) => {
+                if (s.movieId !== movie.id) return false;
+                const tenant = tenants.find((t) => t.id === s.tenantId);
+                if (selectedAtoll !== 'all' && tenant?.branding.atoll !== selectedAtoll) return false;
+                if (selectedIsland !== 'all' && tenant?.branding.island !== selectedIsland) return false;
+                return true;
+              });
+
+              return (
+                <div
+                  key={movie.id}
+                  className="glass-panel rounded-2xl overflow-hidden border border-slate-800 hover:border-slate-700 transition flex flex-col justify-between"
+                >
+                  <div>
+                    {/* Poster Image & Badges */}
+                    <div className="relative aspect-[16/10] overflow-hidden bg-slate-900">
+                      <img
+                        src={movie.backdropUrl || movie.posterUrl}
+                        alt={movie.titleEn}
+                        className="w-full h-full object-cover"
+                      />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#0a0f1d] via-transparent to-black/30" />
+
+                      <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-950/80 text-teal-300 border border-teal-500/30">
+                          {movie.ageRating}
+                        </span>
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-950/80 text-amber-300 border border-amber-500/30 flex items-center space-x-1">
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                          <span>Maldivian Premiere</span>
+                        </span>
+                      </div>
+
+                      {movie.trailerYoutubeUrl && (
+                        <button
+                          onClick={() => setSelectedMovieForTrailer(movie)}
+                          className="absolute bottom-3 right-3 flex items-center space-x-1 px-2.5 py-1 rounded-full bg-teal-500/90 hover:bg-teal-400 text-slate-950 text-xs font-bold shadow-lg transition"
+                        >
+                          <Play className="w-3.5 h-3.5 fill-slate-950" />
+                          <span>Trailer</span>
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Movie Metadata */}
+                    <div className="p-5 space-y-3">
+                      <div>
+                        <h3 className="font-bold text-lg text-white group-hover:text-teal-300 transition">
+                          {movie.titleEn}
+                        </h3>
+                        <p className="text-xs text-teal-400 font-dhivehi font-bold mt-0.5">
+                          {movie.titleDv}
+                        </p>
+                      </div>
+
+                      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
+                        <span className="flex items-center space-x-1">
+                          <Clock className="w-3.5 h-3.5" />
+                          <span>{movie.durationMinutes} min</span>
+                        </span>
+                        <span>•</span>
+                        <span>{movie.genre.slice(0, 2).join(', ')}</span>
+                      </div>
+
+                      <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                        {isDhivehi ? movie.synopsisDv : movie.synopsisEn}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Available Showtimes Pill List */}
+                  <div className="p-5 pt-0 border-t border-slate-800/80 mt-2 space-y-2">
+                    <span className="text-[11px] uppercase tracking-wider font-bold text-slate-400 block pt-3">
+                      Screenings & Tickets:
+                    </span>
+
+                    <div className="space-y-2">
+                      {movieShowtimes.map((st) => {
+                        const screen = screens.find((s) => s.id === st.screenId);
+                        const hall = halls.find((h) => h.id === st.hallId);
+                        const tenant = tenants.find((t) => t.id === st.tenantId);
+
+                        return (
+                          <Link
+                            key={st.id}
+                            to={`/book/${st.id}`}
+                            className="flex items-center justify-between p-2.5 rounded-xl bg-slate-900/80 hover:bg-teal-950/30 border border-slate-800 hover:border-teal-500/40 transition group"
+                          >
+                            <div>
+                              <div className="flex items-center space-x-2">
+                                <span className="font-mono text-sm font-bold text-teal-300">
+                                  {st.startTime}
+                                </span>
+                                <span className="text-xs text-slate-400">• {st.date}</span>
+                              </div>
+                              <p className="text-[11px] text-slate-400 truncate max-w-[180px] sm:max-w-[220px]">
+                                <span className="text-teal-400 font-bold">{tenant?.branding.island}:</span> {tenant?.name} ({screen?.screenName})
+                              </p>
+                            </div>
+
+                            <div className="text-right">
+                              <span className="text-xs font-bold text-amber-400 block">
+                                {formatCurrency(st.priceTiers.standard)}
+                              </span>
+                              <span className="text-[10px] text-teal-400 group-hover:underline">
+                                Pick Seats →
+                              </span>
+                            </div>
+                          </Link>
+                        );
+                      })}
+
+                      {movieShowtimes.length === 0 && (
+                        <p className="text-xs text-slate-500 py-2">
+                          No upcoming public showtimes in this selection.
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </section>
+
+      {/* Become an Organizer & Request Portal Section */}
+      <section className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-4">
+        <div className="glass-panel-glow rounded-3xl p-6 sm:p-10 border border-teal-500/30 bg-gradient-to-br from-[#0c1527] via-[#091120] to-[#060c18] space-y-8">
+          <div className="max-w-3xl space-y-3">
+            <div className="inline-flex items-center space-x-2 px-3 py-1 rounded-full bg-teal-500/10 border border-teal-500/30 text-teal-300 text-xs font-semibold">
+              <Building2 className="w-3.5 h-3.5 text-teal-400" />
+              <span>For Island Councils, Cinemas & Film Organizers</span>
+            </div>
+            <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+              Host Your Cinema or Movie Event on Tickets.mv
+            </h2>
+            <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
+              Empower your island hall or cinema theater with our white-label SaaS platform. Create custom multi-screen seat maps, accept direct BML bank transfers with slip uploads, and check in attendees with mobile QR scanners. <strong>Zero ticket commissions</strong> — just a flat weekly or monthly subscription.
+            </p>
+          </div>
+
+          {/* Core Organizer Benefits Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+            <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
+              <CheckCircle2 className="w-5 h-5 text-teal-400" />
+              <h4 className="text-sm font-bold text-white">Direct Bank Transfers</h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Money goes directly into your BML/MIB bank account with slip verification. Zero ticketing cut taken.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
+              <CheckCircle2 className="w-5 h-5 text-cyan-400" />
+              <h4 className="text-sm font-bold text-white">Multi-Screen Shared Hall</h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Build shared room layouts with multiple screens, VIP/Standard tiers, and live 10-minute hold locking.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 space-y-2">
+              <CheckCircle2 className="w-5 h-5 text-amber-400" />
+              <h4 className="text-sm font-bold text-white">Door Staff QR Validator</h4>
+              <p className="text-xs text-slate-400 leading-relaxed">
+                Check in moviegoers seamlessly at your hall entrance using any mobile smartphone camera.
+              </p>
+            </div>
+          </div>
+
+          {/* Action Box: Send Request via App, WhatsApp, or Telegram */}
+          <div className="p-6 rounded-2xl bg-slate-950/70 border border-teal-500/20 flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div className="space-y-2">
+              <h3 className="text-base font-bold text-white flex items-center space-x-2">
+                <Sparkles className="w-4 h-4 text-teal-400" />
+                <span>Send Request with Payment of Your Choice:</span>
+              </h3>
+              <p className="text-xs text-slate-400">
+                Choose Weekly (MVR 149), Monthly (MVR 499), or 1-Month (MVR 550). Submit through our app, or send directly via WhatsApp or Telegram.
+              </p>
+
+              <div className="pt-2 flex flex-wrap gap-4 text-xs font-semibold text-slate-200">
+                <a
+                  href="https://wa.me/9607771234?text=Hello%20Tickets.mv%20Admin,%20I%20would%20like%20to%20register%20as%20a%20cinema%20organizer"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-1.5 text-emerald-400 hover:text-emerald-300 transition"
+                >
+                  <MessageCircle className="w-4 h-4" />
+                  <span>WhatsApp: +960 777-1234</span>
+                </a>
+
+                <a
+                  href="https://t.me/TicketsMVAdmin"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="flex items-center space-x-1.5 text-sky-400 hover:text-sky-300 transition"
+                >
+                  <Send className="w-4 h-4" />
+                  <span>Telegram: @TicketsMVAdmin</span>
+                </a>
+
+                <a
+                  href="tel:+9603301234"
+                  className="flex items-center space-x-1.5 text-teal-400 hover:text-teal-300 transition"
+                >
+                  <Phone className="w-4 h-4" />
+                  <span>Call: +960 330-1234</span>
+                </a>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 shrink-0">
+              <button
+                type="button"
+                onClick={() => {
+                  setSubmittedReq(null);
+                  setShowOnboardingModal(true);
+                }}
+                className="px-5 py-3 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-400 hover:from-teal-400 hover:to-cyan-300 text-slate-950 font-bold text-xs text-center shadow-lg shadow-teal-500/25 transition active:scale-95 flex items-center justify-center space-x-1.5"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Join as Organizer</span>
+              </button>
+
+              <Link
+                to="/admin"
+                className="px-4 py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs text-center border border-slate-700 transition"
+              >
+                Organizer Sign In
+              </Link>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* MODAL: ORGANIZER ONBOARDING REQUEST (App, WhatsApp, or Telegram) */}
+      {showOnboardingModal && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-md overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 space-y-5 my-8 shadow-2xl">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center space-x-2.5">
+                <div className="w-9 h-9 rounded-xl bg-teal-500/20 text-teal-400 border border-teal-500/30 flex items-center justify-center font-bold">
+                  <Building2 className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-white">Join as Cinema Organizer</h3>
+                  <p className="text-[11px] text-slate-400">Receive unique code & start selling tickets</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setShowOnboardingModal(false)}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {submittedReq ? (
+              <div className="text-center py-6 space-y-4">
+                <div className="w-16 h-16 rounded-full bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 flex items-center justify-center mx-auto">
+                  <Check className="w-8 h-8" />
+                </div>
+                <div>
+                  <h4 className="text-lg font-bold text-white">Registration Request Dispatched!</h4>
+                  <p className="text-xs text-slate-300 mt-1 max-w-xs mx-auto">
+                    Your cinema request has been received. Our team will verify your details and activate your portal.
+                  </p>
+                </div>
+
+                <div className="p-4 rounded-2xl bg-slate-950 border border-teal-500/40 max-w-xs mx-auto space-y-1">
+                  <span className="text-[10px] text-slate-400 font-bold uppercase tracking-wider block">
+                    Your Assigned Tenant Code:
+                  </span>
+                  <div className="text-xl font-mono font-extrabold text-teal-300">
+                    {submittedReq.tenantCode}
+                  </div>
+                  <span className="text-[10px] text-slate-500 block">
+                    Save this code to easily sign in at /admin
+                  </span>
+                </div>
+
+                <div className="flex flex-col sm:flex-row items-center justify-center gap-2 pt-2">
+                  <button
+                    onClick={handleSendWhatsApp}
+                    className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center space-x-1.5 shadow-md"
+                  >
+                    <MessageCircle className="w-4 h-4" />
+                    <span>Confirm via WhatsApp</span>
+                  </button>
+
+                  <button
+                    onClick={() => setShowOnboardingModal(false)}
+                    className="w-full sm:w-auto px-4 py-2.5 rounded-xl bg-slate-800 text-slate-300 hover:text-white font-bold text-xs"
+                  >
+                    Done
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <form onSubmit={handleSubmitInApp} className="space-y-4">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Cinema / Hall Name *
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={reqForm.cinemaName}
+                    onChange={(e) => setReqForm({ ...reqForm, cinemaName: e.target.value })}
+                    placeholder="e.g. Fuvahmulah Community Hall"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                  />
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">Atoll *</label>
+                    <input
+                      type="text"
+                      required
+                      value={reqForm.atoll}
+                      onChange={(e) => setReqForm({ ...reqForm, atoll: e.target.value })}
+                      placeholder="e.g. Kaafu (K)"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">Island *</label>
+                    <input
+                      type="text"
+                      required
+                      value={reqForm.island}
+                      onChange={(e) => setReqForm({ ...reqForm, island: e.target.value })}
+                      placeholder="e.g. Maafushi"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                    />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                      Contact Person *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={reqForm.contactPerson}
+                      onChange={(e) => setReqForm({ ...reqForm, contactPerson: e.target.value })}
+                      placeholder="e.g. Ahmed Ali"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                      Mobile Number (+960) *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={reqForm.contactPhone}
+                      onChange={(e) => setReqForm({ ...reqForm, contactPhone: e.target.value })}
+                      placeholder="+960 777-1234"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Email Address *
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={reqForm.contactEmail}
+                    onChange={(e) => setReqForm({ ...reqForm, contactEmail: e.target.value })}
+                    placeholder="cinema@island.mv"
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                  />
+                </div>
+
+                {/* Subscription Plan Choice */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                    Select SaaS Plan (0% Commission)
+                  </label>
+                  <div className="grid grid-cols-3 gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setReqForm({ ...reqForm, subscriptionPlan: 'weekly' })}
+                      className={`p-2.5 rounded-xl border text-center transition ${
+                        reqForm.subscriptionPlan === 'weekly'
+                          ? 'bg-teal-500 text-slate-950 font-bold border-teal-400 shadow-md'
+                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">Weekly</div>
+                      <div className="text-[10px] font-mono">MVR 149</div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setReqForm({ ...reqForm, subscriptionPlan: 'monthly' })}
+                      className={`p-2.5 rounded-xl border text-center transition ${
+                        reqForm.subscriptionPlan === 'monthly'
+                          ? 'bg-teal-500 text-slate-950 font-bold border-teal-400 shadow-md'
+                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">Monthly</div>
+                      <div className="text-[10px] font-mono">MVR 499</div>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => setReqForm({ ...reqForm, subscriptionPlan: 'one_month' })}
+                      className={`p-2.5 rounded-xl border text-center transition ${
+                        reqForm.subscriptionPlan === 'one_month'
+                          ? 'bg-teal-500 text-slate-950 font-bold border-teal-400 shadow-md'
+                          : 'bg-slate-950 text-slate-400 border-slate-800 hover:text-white'
+                      }`}
+                    >
+                      <div className="text-xs font-bold">1-Month</div>
+                      <div className="text-[10px] font-mono">MVR 550</div>
+                    </button>
+                  </div>
+                </div>
+
+                {/* Payment Method of their Choice */}
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Payment Method of Your Choice
+                  </label>
+                  <select
+                    value={reqForm.paymentMethod}
+                    onChange={(e) => setReqForm({ ...reqForm, paymentMethod: e.target.value as any })}
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                  >
+                    <option value="bml_transfer">Direct BML Bank Transfer (Slip Upload)</option>
+                    <option value="bml_gateway">BML Online Payment Gateway</option>
+                    <option value="mfaisaa">DhiraaguPay / Ooredoo m-Faisaa</option>
+                    <option value="cash">Cash / Island Council Purchase Order</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Special Notes / Hall Requirements (Optional)
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={reqForm.notes}
+                    onChange={(e) => setReqForm({ ...reqForm, notes: e.target.value })}
+                    placeholder="e.g. 2 screens in shared community hall, VIP sofa seats..."
+                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                  />
+                </div>
+
+                {/* 3 Channels: In-App, WhatsApp, or Telegram */}
+                <div className="space-y-2 pt-2 border-t border-slate-800">
+                  <button
+                    type="submit"
+                    className="w-full py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md transition active:scale-95 flex items-center justify-center space-x-1.5"
+                  >
+                    <CheckCircle2 className="w-4 h-4" />
+                    <span>Submit Request via App (Instant Assigned Code)</span>
+                  </button>
+
+                  <div className="grid grid-cols-2 gap-2">
+                    <button
+                      type="button"
+                      onClick={handleSendWhatsApp}
+                      className="py-2.5 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs transition flex items-center justify-center space-x-1.5 shadow-sm"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>Send via WhatsApp</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={handleSendTelegram}
+                      className="py-2.5 px-3 rounded-xl bg-sky-600 hover:bg-sky-500 text-white font-bold text-xs transition flex items-center justify-center space-x-1.5 shadow-sm"
+                    >
+                      <Send className="w-4 h-4" />
+                      <span>Send via Telegram</span>
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Trailer Modal */}
+      {selectedMovieForTrailer && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-md">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-4 space-y-3">
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <h3 className="font-bold text-white text-base">
+                {selectedMovieForTrailer.titleEn} ({selectedMovieForTrailer.titleDv}) - Official Trailer
+              </h3>
+              <button
+                onClick={() => setSelectedMovieForTrailer(null)}
+                className="text-slate-400 hover:text-white p-1"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="aspect-video bg-black rounded-xl overflow-hidden">
+              <iframe
+                src={`https://www.youtube.com/embed/${selectedMovieForTrailer.trailerYoutubeUrl.split('v=')[1] || 'dQw4w9WgXcQ'}?autoplay=1`}
+                title="Trailer"
+                className="w-full h-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                allowFullScreen
+              />
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+};

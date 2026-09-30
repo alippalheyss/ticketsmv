@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  color-scheme: dark;
+}
+
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background-color: #070b14;
+  color: #f1f5f9;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Thaana typography helper */
+.font-dhivehi {
+  font-family: 'Noto Sans Thaana', 'Faruma', 'MV Boli', sans-serif;
+  direction: rtl;
+  text-align: right;
+  line-height: 1.8;
+}
+
+.font-dhivehi-ltr {
+  font-family: 'Noto Sans Thaana', 'Faruma', 'MV Boli', sans-serif;
+}
+
+/* Glassmorphism card utilities */
+.glass-panel {
+  background: rgba(17, 24, 39, 0.75);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.glass-panel-glow {
+  background: rgba(17, 24, 39, 0.85);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(20, 184, 166, 0.25);
+  box-shadow: 0 0 25px rgba(20, 184, 166, 0.08);
+}
+
+/* Cinema Curved Screen visual effect */
+.cinema-screen-curve {
+  width: 100%;
+  height: 24px;
+  border-radius: 50% / 100% 100% 0 0;
+  background: linear-gradient(180deg, rgba(56, 189, 248, 0.5) 0%, rgba(20, 184, 166, 0.1) 80%, transparent 100%);
+  box-shadow: 0 10px 30px rgba(56, 189, 248, 0.35);
+}
+
+/* Custom Scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: #0a0f1d;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #334155;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #14b8a6;
+}
+
+/* Print Styles for Digital Tickets */
+@media print {
+  body {
+    background: #ffffff !important;
+    color: #000000 !important;
+  }
+  .no-print {
+    display: none !important;
+  }
+  .print-only {
+    display: block !important;
+  }
+  .ticket-print-card {
+    border: 2px dashed #000000 !important;
+    box-shadow: none !important;
+    background: #ffffff !important;
+    color: #000000 !important;
+    page-break-inside: avoid;
+  }
+}
