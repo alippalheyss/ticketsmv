@@ -13,7 +13,7 @@ export const Footer: React.FC = () => {
               <div className="w-8 h-8 rounded-lg bg-teal-500 flex items-center justify-center text-slate-950 font-bold">
                 <Film className="w-4 h-4" />
               </div>
-              <span className="text-base font-bold text-white">Tickets.mv</span>
+              <span className="text-base font-bold text-white">CinemaMV.online</span>
             </div>
             <p className="text-slate-400 text-xs leading-relaxed">
               Progressive web app for discovering and booking movie tickets across Maldivian cinema halls, youth centers, and island community auditoriums.
@@ -61,7 +61,7 @@ export const Footer: React.FC = () => {
         </div>
 
         <div className="pt-8 border-t border-slate-800/80 flex flex-col sm:flex-row items-center justify-between gap-4 text-[11px] text-slate-500">
-          <p>© {new Date().getFullYear()} Tickets.mv. All rights reserved across Maldivian Atolls.</p>
+          <p>© {new Date().getFullYear()} CinemaMV.online. All rights reserved across Maldivian Atolls.</p>
           <p className="text-[11px] text-slate-600">Empowering Maldivian island cinemas & local film arts.</p>
         </div>
       </div>

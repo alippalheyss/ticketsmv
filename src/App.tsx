@@ -22,7 +22,7 @@ function RootRouteHandler() {
   const parts = host.split('.');
 
   // Subdomain detection:
-  // e.g. "olympus.tickets.mv" -> parts: ['olympus', 'tickets', 'mv'] -> subdomain: 'olympus'
+  // e.g. "olympus.cinemamv.online" -> parts: ['olympus', 'cinemamv', 'online'] -> subdomain: 'olympus'
   // e.g. "olympus.localhost" -> parts: ['olympus', 'localhost'] -> subdomain: 'olympus'
   const isSubdomain = 
     (parts.length >= 3 && parts[0] !== 'www' && !host.endsWith('.vercel.app')) ||

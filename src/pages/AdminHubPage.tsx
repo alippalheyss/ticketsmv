@@ -136,7 +136,7 @@ export const AdminHubPage: React.FC = () => {
       subscriptionPriceMvr: 0,
       subscriptionBillingDate: new Date(Date.now() + 3 * 86400000).toISOString(),
       createdAt: new Date().toISOString(),
-      ownerEmail: trialOwnerEmail.trim() || `${randomSlug}@trial.tickets.mv`,
+      ownerEmail: trialOwnerEmail.trim() || `${randomSlug}@trial.cinemamv.online`,
       branding: {
         logoUrl: '',
         bannerUrl: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1200&auto=format&fit=crop&q=80',
@@ -211,12 +211,12 @@ export const AdminHubPage: React.FC = () => {
 
     const prefix = cinemaName.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase() || 'CIN';
     const genCode = `${prefix}-${Math.floor(10 + Math.random() * 89)}`;
-    const price = selectedPlanForRegister === 'weekly' ? 149 : (selectedPlanForRegister === 'yearly' || selectedPlanForRegister === 'one_month') ? 1000 : 499;
+    const price = selectedPlanForRegister === 'weekly' ? 149 : (selectedPlanForRegister === 'yearly' || selectedPlanForRegister === 'one_month') ? 499 : 249;
 
     const req = cinemaStore.createTenantRequest({
       cinemaName,
       contactPerson: ownerName || 'Manager',
-      contactEmail: ownerEmail || `${cinemaName.toLowerCase().replace(/\s+/g, '')}@tickets.mv`,
+      contactEmail: ownerEmail || `${cinemaName.toLowerCase().replace(/\s+/g, '')}@cinemamv.online`,
       contactPhone: ownerPhone,
       island: island || 'Malé',
       atoll: atoll || 'Kaafu',
@@ -232,7 +232,7 @@ export const AdminHubPage: React.FC = () => {
 
   const handleOpenWhatsApp = () => {
     const text = encodeURIComponent(
-      `Hello Tickets.mv! I want to register as a Cinema Organizer.\n\n` +
+      `Hello CinemaMV.online! I want to register as a Cinema Organizer.\n\n` +
       `Cinema / Hall: ${cinemaName || 'My Cinema Hall'}\n` +
       `Organizer: ${ownerName || 'Manager'}\n` +
       `Island: ${island || 'Malé'} (${atoll || 'Kaafu'})\n` +
@@ -244,7 +244,7 @@ export const AdminHubPage: React.FC = () => {
   };
 
   const handleOpenTelegram = () => {
-    window.open('https://t.me/TicketsMVAdmin', '_blank');
+    window.open('https://t.me/CinemaMVAdmin', '_blank');
   };
 
   // IF USER IS ALREADY LOGGED IN: SHOW THEIR AUTHENTICATED ORGANIZER DASHBOARD
@@ -445,7 +445,7 @@ export const AdminHubPage: React.FC = () => {
             </div>
             <h3 className="text-base font-bold text-white">0% Ticket Commission</h3>
             <p className="text-xs text-slate-400 leading-relaxed">
-              Keep 100% of your ticket sales. Unlike other platforms that extract 5% to 15% cuts per ticket, Tickets.mv operates on flat, predictable SaaS subscriptions.
+              Keep 100% of your ticket sales. Unlike other platforms that extract 5% to 15% cuts per ticket, CinemaMV.online operates on flat, predictable SaaS subscriptions with direct bank transfers.
             </p>
           </div>
 
@@ -506,95 +506,68 @@ export const AdminHubPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Subscription Plans Section - 3-Day Free Trial, Weekly, Monthly, 1-Month */}
+      {/* Subscription Plans Section - 3-Day Free Trial, Weekly, Monthly, 1-Year Pass */}
       <section id="subscription-plans-section" className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8 scroll-mt-20">
-        <div className="text-center space-y-2 max-w-xl mx-auto">
-          <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-amber-500/10 text-amber-300 border border-amber-500/30 text-xs font-semibold">
-            <CreditCard className="w-3.5 h-3.5" />
-            <span>Transparent Island SaaS Plans</span>
+        <div className="text-center space-y-2 max-w-2xl mx-auto">
+          <div className="inline-flex items-center space-x-1.5 px-3 py-1 rounded-full bg-teal-500/10 text-teal-300 border border-teal-500/30 text-xs font-semibold">
+            <Zap className="w-3.5 h-3.5 text-teal-400" />
+            <span>0% Commission • Keep 100% of Your Box Office</span>
           </div>
           <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-            Choose the Right Plan for Your Cinema
+            Transparent Island SaaS Plans
           </h2>
-          <p className="text-xs text-slate-400">
-            No long-term contracts. No percentage taken from your tickets. Pay via BML Transfer, MIB, Gateway, or Cash.
+          <p className="text-xs sm:text-sm text-slate-400">
+            No per-ticket fees. No hidden cuts. All ticket revenue goes directly to your BML / MIB bank account.
           </p>
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
           {/* Plan 0: 3-Day Free Trial */}
-          <div className="glass-panel rounded-3xl p-6 border-2 border-amber-500/40 bg-gradient-to-b from-amber-950/20 via-slate-900/60 to-slate-900/90 flex flex-col justify-between space-y-6 transition hover:border-amber-400 shadow-xl shadow-amber-500/5">
+          <div className="glass-panel rounded-3xl p-6 border border-slate-800 hover:border-slate-700 bg-slate-900/60 flex flex-col justify-between space-y-6 transition">
             <div className="space-y-4">
-              <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40 inline-block">
-                3-Day Free Trial
+              <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700 inline-block">
+                3-Day Free Sandbox
               </span>
               <div>
                 <div className="flex items-baseline space-x-1">
                   <span className="text-3xl font-black text-white">MVR 0</span>
-                  <span className="text-xs text-slate-400">/ 3 days free</span>
+                  <span className="text-xs text-slate-400">/ 3 days</span>
                 </div>
-                <p className="text-xs text-slate-400 mt-1">
-                  Full sandbox to test hall seat maps, mobile QR scanning, and booking flows.
+                <div className="mt-1 text-[11px] font-semibold text-teal-400 bg-teal-500/10 px-2 py-0.5 rounded-md inline-block">
+                  Risk-Free • Test Everything
+                </div>
+                <p className="text-xs text-slate-400 mt-2">
+                  Full sandbox to test hall seat maps, mobile QR scanning, and customer booking flows.
                 </p>
               </div>
 
-              {/* Available & Non-Available Features */}
+              {/* Available & Limitations */}
               <div className="space-y-3 pt-2 border-t border-slate-800/80">
-                <div>
-                  <span className="text-[10px] uppercase font-bold text-teal-400 tracking-wider block mb-1.5">
-                    Available Features:
-                  </span>
-                  <ul className="space-y-1.5 text-xs text-slate-300">
-                    <li className="flex items-center space-x-2">
-                      <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                      <span>1 Cinema Hall</span>
-                    </li>
-                    <li className="flex items-center space-x-2">
-                      <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                      <span>1 Screen Room (Screen 1)</span>
-                    </li>
-                    <li className="flex items-center space-x-2">
-                      <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                      <span>Full Access to 100 Seats</span>
-                    </li>
-                    <li className="flex items-center space-x-2">
-                      <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                      <span>Mobile QR Door Scanner</span>
-                    </li>
-                    <li className="flex items-center space-x-2">
-                      <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                      <span>Standard BML Bank Slips</span>
-                    </li>
-                    <li className="flex items-center space-x-2">
-                      <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
-                      <span>Random Assigned Subdomain</span>
-                    </li>
-                  </ul>
-                </div>
-
-                <div className="pt-2 border-t border-slate-800/60">
-                  <span className="text-[10px] uppercase font-bold text-rose-400 tracking-wider block mb-1.5">
-                    Non-Available Features:
-                  </span>
-                  <ul className="space-y-1.5 text-xs text-slate-500">
-                    <li className="flex items-center space-x-2 line-through">
-                      <X className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                      <span>Custom Branded Subdomain</span>
-                    </li>
-                    <li className="flex items-center space-x-2 line-through">
-                      <X className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                      <span>Multi-Screen Shared Halls</span>
-                    </li>
-                    <li className="flex items-center space-x-2 line-through">
-                      <X className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                      <span>Multiple Cinema Halls</span>
-                    </li>
-                    <li className="flex items-center space-x-2 line-through">
-                      <X className="w-3.5 h-3.5 text-rose-500 shrink-0" />
-                      <span>Unlimited Ticket Sales</span>
-                    </li>
-                  </ul>
-                </div>
+                <span className="text-[10px] uppercase font-bold text-teal-400 tracking-wider block">
+                  Included In Free Trial:
+                </span>
+                <ul className="space-y-2 text-xs text-slate-300">
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                    <span>1 Cinema Hall & Screen</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                    <span>Up to 100 Visual Seats</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                    <span>Gate QR Door Scanner App</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                    <span>BML Bank Transfer Verification</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                    <span>Assigned Random Subdomain</span>
+                  </li>
+                </ul>
               </div>
             </div>
 
@@ -603,45 +576,58 @@ export const AdminHubPage: React.FC = () => {
                 setTrialFormError('');
                 setIsFreeTrialModalOpen(true);
               }}
-              className="w-full py-3 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-xs shadow-md shadow-amber-500/20 transition active:scale-95 cursor-pointer"
+              className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-700 transition active:scale-95 cursor-pointer"
             >
               Activate Free Trial →
             </button>
           </div>
+
           {/* Plan 1: Weekly */}
           <div className="glass-panel rounded-3xl p-6 border border-slate-800 hover:border-slate-700 flex flex-col justify-between space-y-6 transition">
             <div className="space-y-4">
-              <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-slate-800 text-slate-300 border border-slate-700">
-                Weekly Pass
+              <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-cyan-500/10 text-cyan-300 border border-cyan-500/30">
+                Festival & Weekend Pass
               </span>
               <div>
                 <div className="flex items-baseline space-x-1">
                   <span className="text-3xl font-black text-white">MVR 149</span>
                   <span className="text-xs text-slate-400">/ 7 days</span>
                 </div>
-                <p className="text-xs text-slate-400 mt-1">
-                  Ideal for Eid film festivals, school holiday runs, or weekend special screenings.
+                <div className="mt-1 text-[11px] font-semibold text-cyan-300 bg-cyan-500/10 px-2 py-0.5 rounded-md inline-block">
+                  Flexible • No Contract
+                </div>
+                <p className="text-xs text-slate-400 mt-2">
+                  Tailored for island Eid festivals, film premieres, school holiday roadshows, or single screenings.
                 </p>
               </div>
 
-              <ul className="space-y-2.5 text-xs text-slate-300 pt-2 border-t border-slate-800/80">
-                <li className="flex items-center space-x-2">
-                  <Check className="w-4 h-4 text-teal-400 shrink-0" />
-                  <span>1 Active Cinema Hall with Multi-Screens</span>
-                </li>
-                <li className="flex items-center space-x-2">
-                  <Check className="w-4 h-4 text-teal-400 shrink-0" />
-                  <span>Unlimited Ticket Sales (0% Commission)</span>
-                </li>
-                <li className="flex items-center space-x-2">
-                  <Check className="w-4 h-4 text-teal-400 shrink-0" />
-                  <span>Bank Slip Verification & Door Scanner</span>
-                </li>
-                <li className="flex items-center space-x-2">
-                  <Check className="w-4 h-4 text-teal-400 shrink-0" />
-                  <span>Unique Cinema Code & Sublink</span>
-                </li>
-              </ul>
+              <div className="space-y-3 pt-2 border-t border-slate-800/80">
+                <span className="text-[10px] uppercase font-bold text-cyan-400 tracking-wider block">
+                  Weekly Plan Perks:
+                </span>
+                <ul className="space-y-2 text-xs text-slate-300">
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span>Unlimited Ticket Sales (0% Commission)</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span>1 Active Hall with Multi-Screens</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span>Mobile QR Gate Ticket Scanner</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span>Unique Cinema Code & Direct Link</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-cyan-400 shrink-0" />
+                    <span>Instant WhatsApp Ticket Passes</span>
+                  </li>
+                </ul>
+              </div>
             </div>
 
             <button
@@ -652,99 +638,123 @@ export const AdminHubPage: React.FC = () => {
             </button>
           </div>
 
-          {/* Plan 2: Monthly Pro (Recommended) */}
-          <div className="relative glass-panel rounded-3xl p-6 border-2 border-teal-500 bg-gradient-to-b from-teal-950/20 to-slate-900/60 flex flex-col justify-between space-y-6 shadow-2xl shadow-teal-500/10">
-            <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-teal-500 text-slate-950 text-[10px] font-black uppercase tracking-wider shadow">
-              Most Popular / Recommended
+          {/* Plan 2: Monthly Pro */}
+          <div className="relative glass-panel rounded-3xl p-6 border-2 border-teal-500 bg-gradient-to-b from-teal-950/30 via-slate-900/80 to-slate-900 flex flex-col justify-between space-y-6 shadow-2xl shadow-teal-500/20">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-gradient-to-r from-teal-500 to-cyan-400 text-slate-950 text-[10px] font-black uppercase tracking-wider shadow">
+              Most Popular • Best Seller
             </div>
 
             <div className="space-y-4 pt-1">
               <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-teal-500/20 text-teal-300 border border-teal-500/30">
-                Monthly Pro
+                Monthly Pro Plan
               </span>
               <div>
                 <div className="flex items-baseline space-x-1">
-                  <span className="text-4xl font-black text-white">MVR 499</span>
+                  <span className="text-4xl font-black text-white">MVR 249</span>
                   <span className="text-xs text-slate-400">/ month</span>
                 </div>
-                <p className="text-xs text-teal-200/80 mt-1">
-                  Best value for continuous cinemas, island town halls, and commercial screens.
+                <div className="mt-1 text-[11px] font-bold text-emerald-400 bg-emerald-500/10 px-2 py-0.5 rounded-md inline-block">
+                  Only ~MVR 8.30/day • Pays for itself in 2 tickets!
+                </div>
+                <p className="text-xs text-teal-200/80 mt-2">
+                  Everything you need for ongoing island theaters, town youth halls, and regular movie nights.
                 </p>
               </div>
 
-              <ul className="space-y-2.5 text-xs text-slate-200 pt-2 border-t border-teal-500/20">
-                <li className="flex items-center space-x-2">
-                  <Check className="w-4 h-4 text-teal-400 shrink-0" />
-                  <span>Multiple Halls & Multi-Screen Designer</span>
-                </li>
-                <li className="flex items-center space-x-2">
-                  <Check className="w-4 h-4 text-teal-400 shrink-0" />
-                  <span>Unlimited Shows, Movies & Ticket Sales</span>
-                </li>
-                <li className="flex items-center space-x-2">
-                  <Check className="w-4 h-4 text-teal-400 shrink-0" />
-                  <span>Attendee Mobile Numbers & Sales Reports</span>
-                </li>
-                <li className="flex items-center space-x-2">
-                  <Check className="w-4 h-4 text-teal-400 shrink-0" />
-                  <span>Custom Island Hall Branding & Posters</span>
-                </li>
-                <li className="flex items-center space-x-2">
-                  <Check className="w-4 h-4 text-teal-400 shrink-0" />
-                  <span>Priority Maldivian Support via WhatsApp</span>
-                </li>
-              </ul>
+              <div className="space-y-3 pt-2 border-t border-teal-500/20">
+                <span className="text-[10px] uppercase font-bold text-teal-400 tracking-wider block">
+                  All Pro Cinema Features:
+                </span>
+                <ul className="space-y-2 text-xs text-slate-200">
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                    <span><strong>100% Revenue Kept:</strong> Direct to your BML/MIB</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                    <span><strong>Custom Subdomain:</strong> you.cinemamv.online</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                    <span><strong>Multi-Screens:</strong> Screen 1, 2, 3 & seat designer</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                    <span><strong>Attendee Export:</strong> Customer Maldivian mobiles</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-teal-400 shrink-0" />
+                    <span><strong>Unlimited:</strong> Movies, shows, and door tickets</span>
+                  </li>
+                </ul>
+              </div>
             </div>
 
             <button
               onClick={() => handleOpenRegister('monthly')}
-              className="w-full py-3.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs shadow-lg shadow-teal-500/25 transition active:scale-95"
+              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-400 hover:from-teal-400 hover:to-cyan-300 text-slate-950 font-black text-xs shadow-lg shadow-teal-500/25 transition active:scale-95"
             >
-              Get Started with Monthly Pro →
+              Get Started with Monthly (MVR 249) →
             </button>
           </div>
 
-          {/* Plan 3: 1-Year Annual Pass */}
-          <div className="glass-panel rounded-3xl p-6 border border-slate-800 hover:border-slate-700 flex flex-col justify-between space-y-6 transition">
-            <div className="space-y-4">
-              <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-amber-500/10 text-amber-300 border border-amber-500/30">
-                1-Year Annual Pass
+          {/* Plan 3: 1-Year Annual Pass (Super Value) */}
+          <div className="relative glass-panel rounded-3xl p-6 border-2 border-amber-500/60 bg-gradient-to-b from-amber-950/25 via-slate-900/80 to-slate-900 flex flex-col justify-between space-y-6 shadow-2xl shadow-amber-500/15">
+            <div className="absolute -top-3 left-1/2 -translate-x-1/2 px-3 py-0.5 rounded-full bg-gradient-to-r from-amber-500 to-orange-400 text-slate-950 text-[10px] font-black uppercase tracking-wider shadow">
+              🔥 Best Value • Save 83%
+            </div>
+
+            <div className="space-y-4 pt-1">
+              <span className="px-3 py-1 rounded-full text-[11px] font-bold bg-amber-500/20 text-amber-300 border border-amber-500/40">
+                1-Year VIP Cinema Pass
               </span>
               <div>
                 <div className="flex items-baseline space-x-1">
-                  <span className="text-3xl font-black text-white">MVR 1,000</span>
-                  <span className="text-xs text-slate-400">/ year</span>
+                  <span className="text-4xl font-black text-white">MVR 499</span>
+                  <span className="text-xs text-slate-400">/ 365 days</span>
                 </div>
-                <p className="text-xs text-slate-400 mt-1">
-                  Full 12-month cinema management pass. Best long-term value for permanent theaters, island halls, and festival organizers.
+                <div className="mt-1 text-[11px] font-bold text-amber-300 bg-amber-500/10 px-2 py-0.5 rounded-md inline-block">
+                  Only MVR 41.50/mo • Save 83% Over Monthly!
+                </div>
+                <p className="text-xs text-amber-200/80 mt-2">
+                  The ultimate 12-month pass. Unlocks full cinema power for an entire year for less than the price of 4 movie tickets.
                 </p>
               </div>
 
-              <ul className="space-y-2.5 text-xs text-slate-300 pt-2 border-t border-slate-800/80">
-                <li className="flex items-center space-x-2">
-                  <Check className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>All Multi-Screen & Hall Features</span>
-                </li>
-                <li className="flex items-center space-x-2">
-                  <Check className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>Full 365 Days Access (Highest Savings)</span>
-                </li>
-                <li className="flex items-center space-x-2">
-                  <Check className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>Custom Subdomain & Direct BML Slips</span>
-                </li>
-                <li className="flex items-center space-x-2">
-                  <Check className="w-4 h-4 text-amber-400 shrink-0" />
-                  <span>Unlimited Door Staff QR Validations</span>
-                </li>
-              </ul>
+              <div className="space-y-3 pt-2 border-t border-amber-500/20">
+                <span className="text-[10px] uppercase font-bold text-amber-400 tracking-wider block">
+                  VIP Annual Privileges:
+                </span>
+                <ul className="space-y-2 text-xs text-slate-200">
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span><strong>Full 365 Days:</strong> Uninterrupted cinema hosting</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span><strong>All Pro & Multi-Screen:</strong> VIP & Standard seats</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span><strong>Priority Support:</strong> Direct Maldivian WhatsApp</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span><strong>Customer CRM:</strong> Mobile numbers & show broadcasts</span>
+                  </li>
+                  <li className="flex items-center space-x-2">
+                    <Check className="w-3.5 h-3.5 text-amber-400 shrink-0" />
+                    <span><strong>Zero Commissions:</strong> 100% box office profit</span>
+                  </li>
+                </ul>
+              </div>
             </div>
 
             <button
               onClick={() => handleOpenRegister('yearly')}
-              className="w-full py-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-white font-bold text-xs border border-slate-700 transition active:scale-95"
+              className="w-full py-3.5 rounded-xl bg-gradient-to-r from-amber-500 to-amber-400 hover:from-amber-400 hover:to-amber-300 text-slate-950 font-black text-xs shadow-lg shadow-amber-500/25 transition active:scale-95"
             >
-              Get Started with 1-Year Pass →
+              Claim 1-Year Pass (MVR 499) →
             </button>
           </div>
         </div>
@@ -963,8 +973,8 @@ export const AdminHubPage: React.FC = () => {
                             : 'bg-slate-950 border-slate-800 text-slate-400'
                         }`}
                       >
-                        <div className="text-[11px]">Monthly</div>
-                        <div className="text-xs font-extrabold text-teal-300">MVR 499</div>
+                        <div className="text-[11px]">Monthly Pro</div>
+                        <div className="text-xs font-extrabold text-teal-300">MVR 249</div>
                       </button>
 
                       <button
@@ -976,8 +986,8 @@ export const AdminHubPage: React.FC = () => {
                             : 'bg-slate-950 border-slate-800 text-slate-400'
                         }`}
                       >
-                        <div className="text-[11px]">1-Year</div>
-                        <div className="text-xs font-extrabold text-amber-300">MVR 1,000</div>
+                        <div className="text-[11px]">1-Year Pass</div>
+                        <div className="text-xs font-extrabold text-amber-300">MVR 499</div>
                       </button>
                     </div>
                   </div>
@@ -1128,7 +1138,7 @@ export const AdminHubPage: React.FC = () => {
               </div>
               <ul className="text-[11px] text-slate-300 space-y-1.5 pl-5 list-disc leading-relaxed">
                 <li>
-                  <strong className="text-white">Random Subdomain Only:</strong> Free accounts are assigned a system-generated random domain (e.g. <span className="font-mono text-amber-300">hall-XXX.tickets.mv</span>). Custom branded subdomains require a Paid Plan.
+                  <strong className="text-white">Random Subdomain Only:</strong> Free accounts are assigned a system-generated random domain (e.g. <span className="font-mono text-amber-300">hall-XXX.cinemamv.online</span>). Custom branded subdomains require a Paid Plan.
                 </li>
                 <li>
                   <strong className="text-white">1 Hall & 1 Screen Limit:</strong> Setup 1 cinema hall and 1 screen. Multi-screen setups (Screen 1, 2, 3 in shared halls) are available on Paid Plans.
@@ -1233,7 +1243,7 @@ export const AdminHubPage: React.FC = () => {
                   type="email"
                   value={trialOwnerEmail}
                   onChange={(e) => setTrialOwnerEmail(e.target.value)}
-                  placeholder="e.g. cinema@tickets.mv"
+                  placeholder="e.g. cinema@cinemamv.online"
                   className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
                 />
               </div>

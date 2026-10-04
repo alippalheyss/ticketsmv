@@ -76,15 +76,15 @@ export const TicketPassPage: React.FC = () => {
     const startStr = `${showtime.date.replace(/-/g, '')}T${showtime.startTime.replace(':', '')}00`;
     const icsContent = `BEGIN:VCALENDAR
 VERSION:2.0
-PRODID:-//Tickets.mv//Maldivian Cinema Pass//EN
+PRODID:-//CinemaMV.online//Maldivian Cinema Pass//EN
 CALSCALE:GREGORIAN
 METHOD:PUBLISH
 BEGIN:VEVENT
-UID:${booking.id}@tickets.mv
+UID:${booking.id}@cinemamv.online
 DTSTAMP:${new Date().toISOString().replace(/[-:]/g, '').split('.')[0]}Z
 DTSTART:${startStr}
 SUMMARY:Movie: ${movie.titleEn} (${movie.titleDv})
-DESCRIPTION:Tickets.mv digital booking pass for ${movie.titleEn}. Seats: ${booking.seats.map(s => s.label).join(', ')}. Cinema: ${tenant?.name || 'Island Hall'}.
+DESCRIPTION:CinemaMV.online digital booking pass for ${movie.titleEn}. Seats: ${booking.seats.map(s => s.label).join(', ')}. Cinema: ${tenant?.name || 'Island Hall'}.
 LOCATION:${hall?.name || 'Maldivian Cinema Hall'}, ${tenant?.branding.island || 'Maldives'}
 STATUS:CONFIRMED
 END:VEVENT
@@ -333,14 +333,14 @@ END:VCALENDAR`;
             {/* Email HTML Template Simulation */}
             <div className="bg-white text-slate-900 rounded-2xl p-6 shadow-inner font-sans text-xs space-y-4">
               <div className="border-b border-slate-200 pb-3 flex justify-between items-center">
-                <span className="font-bold text-sm text-teal-800">Tickets.mv • {tenant?.name}</span>
+                <span className="font-bold text-sm text-teal-800">CinemaMV.online • {tenant?.name}</span>
                 <span className="font-mono text-slate-500">Ref: {booking.bookingRef}</span>
               </div>
 
               <div>
                 <h4 className="text-base font-bold text-slate-900">Your Movie Ticket is Confirmed!</h4>
                 <p className="text-slate-600 mt-1">
-                  Hi {booking.guestName}, thank you for booking your movie screening tickets with Tickets.mv.
+                  Hi {booking.guestName}, thank you for booking your movie screening tickets with CinemaMV.online.
                 </p>
               </div>
 
@@ -364,7 +364,7 @@ END:VCALENDAR`;
               </div>
 
               <div className="border-t border-slate-200 pt-3 text-[10px] text-slate-400 text-center">
-                Tickets.mv • The Official Maldivian Island Movie Ticketing Network • Male', Maldives
+                CinemaMV.online • The Official Maldivian Island Movie Ticketing Network • Male', Maldives
               </div>
             </div>
           </div>

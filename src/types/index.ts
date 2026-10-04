@@ -35,7 +35,7 @@ export interface Tenant {
   status: TenantStatus;
   branding: TenantBranding;
   subscriptionModel: SubscriptionModel; // 'weekly' | 'monthly' | 'yearly' | 'free_trial'
-  subscriptionPriceMvr: number; // e.g. 149 for weekly, 499 for monthly, 1000 for yearly
+  subscriptionPriceMvr: number; // e.g. 149 for weekly, 249 for monthly, 499 for yearly
   subscriptionBillingDate?: string;
   createdAt: string;
   ownerEmail: string;

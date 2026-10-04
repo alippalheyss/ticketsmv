@@ -13,7 +13,7 @@ interface LanguageContextType {
 
 const translations: Record<Language, Record<string, string>> = {
   en: {
-    'platform.title': 'Tickets.mv',
+    'platform.title': 'CinemaMV.online',
     'platform.subtitle': 'Maldivian Island & Cinema Ticketing Platform',
     'nav.cinemas': 'Cinemas & Islands',
     'nav.movies': 'Now Showing',

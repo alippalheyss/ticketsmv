@@ -112,7 +112,7 @@ export const Navbar: React.FC = () => {
               className="w-full flex items-center justify-center space-x-2 py-2.5 rounded-lg bg-teal-500 text-slate-950 font-semibold text-sm mb-3"
             >
               <Download className="w-4 h-4" />
-              <span>Add Tickets.mv to Home Screen</span>
+              <span>Add CinemaMV.online to Home Screen</span>
             </button>
           )}
 

@@ -106,7 +106,7 @@ export const SuperAdminPage: React.FC = () => {
             Platform Owner & Super Admin Login
           </h1>
           <p className="text-xs text-slate-400 leading-relaxed">
-            Restricted master administration gate for Tickets.mv. Manage tenant subscriptions, review requests, and platform logs.
+            Restricted master administration gate for CinemaMV.online. Manage tenant subscriptions, review requests, and platform logs.
           </p>
         </div>
 
@@ -173,7 +173,7 @@ export const SuperAdminPage: React.FC = () => {
   // Platform Analytics Calculations
   const totalSubscriptionRevenueMVR = tenants
     .filter((t) => t.status === 'active' && t.subscriptionModel !== 'free_trial')
-    .reduce((sum, t) => sum + (t.subscriptionPriceMvr || 499), 0);
+    .reduce((sum, t) => sum + (t.subscriptionPriceMvr || 249), 0);
 
   const totalTicketsBooked = bookings
     .filter((b) => b.paymentStatus === 'paid')
@@ -184,10 +184,10 @@ export const SuperAdminPage: React.FC = () => {
 
   // Change Subscription Model (Weekly, Monthly, or 1-Year Pass)
   const handleSetSubscription = (tenant: Tenant, model: SubscriptionModel) => {
-    let price = 499;
+    let price = 249;
     if (model === 'weekly') price = 149;
-    if (model === 'monthly') price = 499;
-    if (model === 'yearly' || model === 'one_month') price = 1000;
+    if (model === 'monthly') price = 249;
+    if (model === 'yearly' || model === 'one_month') price = 499;
     if (model === 'free_trial') price = 0;
 
     cinemaStore.updateTenantSubscription(tenant.id, model, price);
@@ -249,7 +249,7 @@ export const SuperAdminPage: React.FC = () => {
           </div>
           <div>
             <h1 className="text-lg sm:text-xl font-bold text-white">Super Admin</h1>
-            <p className="text-[11px] text-slate-400">Tickets.mv Network Control Hub</p>
+            <p className="text-[11px] text-slate-400">CinemaMV.online Network Control Hub</p>
           </div>
         </div>
 
@@ -467,8 +467,8 @@ export const SuperAdminPage: React.FC = () => {
                         : 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
                     }`}>
                       {tenant.subscriptionModel === 'weekly' ? 'Weekly (MVR 149/wk)' :
-                       tenant.subscriptionModel === 'yearly' || tenant.subscriptionModel === 'one_month' ? '1-Year Pass (MVR 1,000/yr)' :
-                       tenant.subscriptionModel === 'monthly' ? 'Monthly (MVR 499/mo)' :
+                       tenant.subscriptionModel === 'yearly' || tenant.subscriptionModel === 'one_month' ? '1-Year Pass (MVR 499/yr)' :
+                       tenant.subscriptionModel === 'monthly' ? 'Monthly (MVR 249/mo)' :
                        'Free Plan (MVR 0)'}
                     </span>
                   </div>
@@ -513,7 +513,7 @@ export const SuperAdminPage: React.FC = () => {
                           : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
                       }`}
                     >
-                      Monthly (499)
+                      Monthly (249)
                     </button>
                     <button
                       onClick={() => handleSetSubscription(tenant, 'yearly')}
@@ -523,7 +523,7 @@ export const SuperAdminPage: React.FC = () => {
                           : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
                       }`}
                     >
-                      1-Year (1000)
+                      1-Year (499)
                     </button>
                   </div>
 
@@ -623,8 +623,8 @@ export const SuperAdminPage: React.FC = () => {
                               : 'bg-teal-500/20 text-teal-300 border border-teal-500/40'
                           }`}>
                             {tenant.subscriptionModel === 'weekly' ? 'Weekly (MVR 149/wk)' :
-                             tenant.subscriptionModel === 'yearly' || tenant.subscriptionModel === 'one_month' ? '1-Year Pass (MVR 1,000/yr)' :
-                             tenant.subscriptionModel === 'monthly' ? 'Monthly (MVR 499/mo)' :
+                             tenant.subscriptionModel === 'yearly' || tenant.subscriptionModel === 'one_month' ? '1-Year Pass (MVR 499/yr)' :
+                             tenant.subscriptionModel === 'monthly' ? 'Monthly (MVR 249/mo)' :
                              'Free Plan (MVR 0)'}
                           </span>
 
@@ -673,7 +673,7 @@ export const SuperAdminPage: React.FC = () => {
                                 : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                             }`}
                           >
-                            Monthly (499)
+                            Monthly (249)
                           </button>
                           <button
                             onClick={() => handleSetSubscription(tenant, 'yearly')}
@@ -683,7 +683,7 @@ export const SuperAdminPage: React.FC = () => {
                                 : 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
                             }`}
                           >
-                            1-Year (1000)
+                            1-Year (499)
                           </button>
 
                           {tenant.tier === 'paid' && (

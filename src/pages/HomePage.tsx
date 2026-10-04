@@ -132,7 +132,7 @@ export const HomePage: React.FC = () => {
   // Handle in-app request submission
   const handleSubmitInApp = (e: React.FormEvent) => {
     e.preventDefault();
-    const price = reqForm.subscriptionPlan === 'weekly' ? 149 : (reqForm.subscriptionPlan === 'yearly' || reqForm.subscriptionPlan === 'one_month') ? 1000 : 499;
+    const price = reqForm.subscriptionPlan === 'weekly' ? 149 : (reqForm.subscriptionPlan === 'yearly' || reqForm.subscriptionPlan === 'one_month') ? 499 : 249;
     const req = cinemaStore.createTenantRequest({
       cinemaName: reqForm.cinemaName,
       atoll: reqForm.atoll,
@@ -151,7 +151,7 @@ export const HomePage: React.FC = () => {
 
   // Handle WhatsApp request
   const handleSendWhatsApp = () => {
-    const price = reqForm.subscriptionPlan === 'weekly' ? 149 : (reqForm.subscriptionPlan === 'yearly' || reqForm.subscriptionPlan === 'one_month') ? 1000 : 499;
+    const price = reqForm.subscriptionPlan === 'weekly' ? 149 : (reqForm.subscriptionPlan === 'yearly' || reqForm.subscriptionPlan === 'one_month') ? 499 : 249;
     const code = `TEN-${(reqForm.island || 'ISL').substring(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`;
     cinemaStore.createTenantRequest({
       cinemaName: reqForm.cinemaName || 'New Cinema Organizer',
@@ -169,7 +169,7 @@ export const HomePage: React.FC = () => {
     });
 
     const text = encodeURIComponent(
-      `*Tickets.mv Cinema Organizer Onboarding Request*\n` +
+      `*CinemaMV.online Cinema Organizer Onboarding Request*\n` +
       `Tenant Code: ${code}\n` +
       `Cinema / Hall: ${reqForm.cinemaName || 'New Cinema'}\n` +
       `Location: ${reqForm.atoll} - ${reqForm.island}\n` +
@@ -184,7 +184,7 @@ export const HomePage: React.FC = () => {
 
   // Handle Telegram request
   const handleSendTelegram = () => {
-    const price = reqForm.subscriptionPlan === 'weekly' ? 149 : (reqForm.subscriptionPlan === 'yearly' || reqForm.subscriptionPlan === 'one_month') ? 1000 : 499;
+    const price = reqForm.subscriptionPlan === 'weekly' ? 149 : (reqForm.subscriptionPlan === 'yearly' || reqForm.subscriptionPlan === 'one_month') ? 499 : 249;
     const code = `TEN-${(reqForm.island || 'ISL').substring(0, 3).toUpperCase()}-${Math.floor(10 + Math.random() * 90)}`;
     cinemaStore.createTenantRequest({
       cinemaName: reqForm.cinemaName || 'New Cinema Organizer',
@@ -202,7 +202,7 @@ export const HomePage: React.FC = () => {
     });
 
     const text = encodeURIComponent(
-      `Tickets.mv Organizer Request - Code: ${code} - ${reqForm.cinemaName} (${reqForm.island}) - Plan: ${reqForm.subscriptionPlan} - Payment: ${reqForm.paymentMethod}`
+      `CinemaMV.online Organizer Request - Code: ${code} - ${reqForm.cinemaName} (${reqForm.island}) - Plan: ${reqForm.subscriptionPlan} - Payment: ${reqForm.paymentMethod}`
     );
     window.open(`https://t.me/TicketsMVAdmin?text=${text}`, '_blank');
   };
@@ -537,7 +537,7 @@ export const HomePage: React.FC = () => {
               <span>For Island Councils, Cinemas & Film Organizers</span>
             </div>
             <h2 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Host Your Cinema or Movie Event on Tickets.mv
+              Host Your Cinema or Movie Event on CinemaMV.online
             </h2>
             <p className="text-xs sm:text-sm text-slate-300 leading-relaxed">
               Empower your island hall or cinema theater with our white-label SaaS platform. Create custom multi-screen seat maps, accept direct BML bank transfers with slip uploads, and check in attendees with mobile QR scanners. <strong>Zero ticket commissions</strong> — just a flat weekly or monthly subscription.
@@ -579,12 +579,12 @@ export const HomePage: React.FC = () => {
                 <span>Send Request with Payment of Your Choice:</span>
               </h3>
               <p className="text-xs text-slate-400">
-                Choose Weekly (MVR 149), Monthly (MVR 499), or 1-Year Pass (MVR 1,000). Submit through our app, or send directly via WhatsApp or Telegram.
+                Choose Weekly (MVR 149), Monthly (MVR 249), or 1-Year Pass (MVR 499). Submit through our app, or send directly via WhatsApp or Telegram.
               </p>
 
               <div className="pt-2 flex flex-wrap gap-4 text-xs font-semibold text-slate-200">
                 <a
-                  href="https://wa.me/9607771234?text=Hello%20Tickets.mv%20Admin,%20I%20would%20like%20to%20register%20as%20a%20cinema%20organizer"
+                  href="https://wa.me/9607771234?text=Hello%20CinemaMV.online%20Admin,%20I%20would%20like%20to%20register%20as%20a%20cinema%20organizer"
                   target="_blank"
                   rel="noopener noreferrer"
                   className="flex items-center space-x-1.5 text-emerald-400 hover:text-emerald-300 transition"
@@ -802,7 +802,7 @@ export const HomePage: React.FC = () => {
                       }`}
                     >
                       <div className="text-xs font-bold">Monthly</div>
-                      <div className="text-[10px] font-mono">MVR 499</div>
+                      <div className="text-[10px] font-mono">MVR 249</div>
                     </button>
 
                     <button
@@ -815,7 +815,7 @@ export const HomePage: React.FC = () => {
                       }`}
                     >
                       <div className="text-xs font-bold">1-Year Pass</div>
-                      <div className="text-[10px] font-mono">MVR 1,000</div>
+                      <div className="text-[10px] font-mono">MVR 499</div>
                     </button>
                   </div>
                 </div>

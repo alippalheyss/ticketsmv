@@ -1,6 +1,69 @@
 import { 
   Tenant, Hall, Screen, Movie, Showtime, Booking, SeatHold, SystemLog, SeatConfig, SeatType, TenantRegistrationRequest 
 } from '../types';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
+
+// Helper mappers between Supabase PostgreSQL snake_case and TypeScript camelCase
+function mapMovieFromDb(row: any): Movie {
+  return {
+    id: row.id,
+    tenantId: row.tenant_id || undefined,
+    titleEn: row.title_en,
+    titleDv: row.title_dv || '',
+    synopsisEn: row.synopsis_en || '',
+    synopsisDv: row.synopsis_dv || '',
+    posterUrl: row.poster_url || '',
+    backdropUrl: row.backdrop_url || '',
+    durationMinutes: Number(row.duration_minutes) || 120,
+    ageRating: row.age_rating || 'PG-13',
+    trailerYoutubeUrl: row.trailer_youtube_url || '',
+    cast: row.cast_members || [],
+    genre: row.genres || [],
+    releaseDate: row.release_date || new Date().toISOString().split('T')[0],
+    published: row.published !== false
+  };
+}
+
+function mapShowtimeFromDb(row: any): Showtime {
+  return {
+    id: row.id,
+    movieId: row.movie_id,
+    screenId: row.screen_id,
+    hallId: row.hall_id,
+    tenantId: row.tenant_id,
+    date: row.show_date,
+    startTime: typeof row.start_time === 'string' ? row.start_time.substring(0, 5) : '20:30',
+    endTime: typeof row.end_time === 'string' ? row.end_time.substring(0, 5) : '22:30',
+    priceTiers: typeof row.price_tiers === 'object' && row.price_tiers ? row.price_tiers : { standard: 100, vip: 150, couple: 250, accessible: 80 },
+    status: row.status || 'scheduled'
+  };
+}
+
+function mapTenantFromDb(row: any): Tenant {
+  return {
+    id: row.id,
+    name: row.name,
+    slug: row.slug,
+    tenantCode: row.tenant_code || row.branding?.tenantCode || 'ORG-01',
+    tier: row.tier || 'paid',
+    status: row.status || 'active',
+    branding: row.branding || {
+      logoUrl: '',
+      bannerUrl: '',
+      primaryColor: '#0d9488',
+      contactPhone: '',
+      island: 'Malé',
+      atoll: 'Kaafu',
+      terms: ''
+    },
+    subscriptionModel: row.subscription_model || row.branding?.subscriptionModel || 'monthly',
+    subscriptionPriceMvr: Number(row.subscription_price_mvr) || Number(row.branding?.subscriptionPriceMvr) || 249,
+    subscriptionBillingDate: row.subscription_billing_date || row.branding?.subscriptionBillingDate,
+    createdAt: row.created_at,
+    ownerEmail: row.owner_email,
+    cinemaSlots: row.cinema_slots || row.branding?.cinemaSlots || 1
+  };
+}
 
 const STORAGE_KEYS = {
   TENANTS: 'mv_tickets_tenants_v3',
@@ -25,7 +88,7 @@ const INITIAL_TENANTS: Tenant[] = [
     status: 'active',
     ownerEmail: 'alippalheys@gmail.com',
     subscriptionModel: 'monthly', // 'weekly' | 'monthly' | 'one_month' | 'free_trial'
-    subscriptionPriceMvr: 499, // Flat monthly subscription (no commission percentage!)
+    subscriptionPriceMvr: 249, // Flat monthly subscription (no commission percentage!)
     subscriptionBillingDate: new Date(Date.now() + 25 * 86400000).toISOString(),
     createdAt: new Date(Date.now() - 30 * 86400000).toISOString(),
     branding: {
@@ -57,7 +120,7 @@ const INITIAL_TENANTS: Tenant[] = [
     status: 'active',
     ownerEmail: 'council@velidhoo.gov.mv',
     subscriptionModel: 'yearly', // 1-Year Annual Pass
-    subscriptionPriceMvr: 1000,
+    subscriptionPriceMvr: 499,
     subscriptionBillingDate: new Date(Date.now() + 300 * 86400000).toISOString(),
     createdAt: new Date(Date.now() - 15 * 86400000).toISOString(),
     branding: {
@@ -376,7 +439,7 @@ const INITIAL_LOGS: SystemLog[] = [
     id: 'log-1',
     type: 'payment',
     tenantId: 'tenant-1',
-    message: 'Monthly SaaS subscription active: MVR 499.00/month for Olympus Cinema Malé (No ticket commission charged)',
+    message: 'Monthly SaaS subscription active: MVR 249.00/month for Olympus Cinema Malé (No ticket commission charged)',
     details: 'Plan: Paid Monthly | Multi-screen hall enabled',
     status: 'success',
     timestamp: new Date(Date.now() - 3550000).toISOString()
@@ -395,6 +458,7 @@ const INITIAL_LOGS: SystemLog[] = [
 class MaldivianCinemaStore {
   private channel: BroadcastChannel | null = null;
   private listeners: Set<() => void> = new Set();
+  private supabaseSyncing = false;
 
   constructor() {
     this.initDefaults();
@@ -406,10 +470,35 @@ class MaldivianCinemaStore {
         }
       };
     }
+    // Asynchronously sync from Supabase if configured
+    this.syncFromSupabase();
+  }
+
+  private getDeletedTombstones(): { movies: string[]; showtimes: string[] } {
+    try {
+      const data = localStorage.getItem('mv_cinemamv_tombstones_v1');
+      return data ? JSON.parse(data) : { movies: [], showtimes: [] };
+    } catch {
+      return { movies: [], showtimes: [] };
+    }
+  }
+
+  private addDeletedTombstone(type: 'movie' | 'showtime', id: string) {
+    try {
+      const ts = this.getDeletedTombstones();
+      if (type === 'movie' && !ts.movies.includes(id)) {
+        ts.movies.push(id);
+      } else if (type === 'showtime' && !ts.showtimes.includes(id)) {
+        ts.showtimes.push(id);
+      }
+      localStorage.setItem('mv_cinemamv_tombstones_v1', JSON.stringify(ts));
+    } catch {}
   }
 
   private initDefaults() {
     if (typeof window === 'undefined') return;
+    const tombstones = this.getDeletedTombstones();
+
     if (!localStorage.getItem(STORAGE_KEYS.TENANTS)) {
       localStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(INITIAL_TENANTS));
     }
@@ -420,10 +509,12 @@ class MaldivianCinemaStore {
       localStorage.setItem(STORAGE_KEYS.SCREENS, JSON.stringify(INITIAL_SCREENS));
     }
     if (!localStorage.getItem(STORAGE_KEYS.MOVIES)) {
-      localStorage.setItem(STORAGE_KEYS.MOVIES, JSON.stringify(INITIAL_MOVIES));
+      const filteredMovies = INITIAL_MOVIES.filter(m => !tombstones.movies.includes(m.id));
+      localStorage.setItem(STORAGE_KEYS.MOVIES, JSON.stringify(filteredMovies));
     }
     if (!localStorage.getItem(STORAGE_KEYS.SHOWTIMES)) {
-      localStorage.setItem(STORAGE_KEYS.SHOWTIMES, JSON.stringify(INITIAL_SHOWTIMES));
+      const filteredShowtimes = INITIAL_SHOWTIMES.filter(s => !tombstones.showtimes.includes(s.id));
+      localStorage.setItem(STORAGE_KEYS.SHOWTIMES, JSON.stringify(filteredShowtimes));
     }
     if (!localStorage.getItem(STORAGE_KEYS.BOOKINGS)) {
       localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(INITIAL_BOOKINGS));
@@ -433,6 +524,69 @@ class MaldivianCinemaStore {
     }
     if (!localStorage.getItem(STORAGE_KEYS.SYSTEM_LOGS)) {
       localStorage.setItem(STORAGE_KEYS.SYSTEM_LOGS, JSON.stringify(INITIAL_LOGS));
+    }
+  }
+
+  public async syncFromSupabase(): Promise<void> {
+    if (!isSupabaseConfigured() || this.supabaseSyncing) return;
+    this.supabaseSyncing = true;
+    try {
+      // 1. Fetch remote movies
+      const { data: mvRows, error: mvErr } = await supabase.from('movies').select('*');
+      if (!mvErr && mvRows && mvRows.length > 0) {
+        const remoteMovies = mvRows.map(mapMovieFromDb);
+        localStorage.setItem(STORAGE_KEYS.MOVIES, JSON.stringify(remoteMovies));
+      }
+
+      // 2. Fetch remote showtimes
+      const { data: stRows, error: stErr } = await supabase.from('showtimes').select('*');
+      if (!stErr && stRows && stRows.length > 0) {
+        const remoteShowtimes = stRows.map(mapShowtimeFromDb);
+        localStorage.setItem(STORAGE_KEYS.SHOWTIMES, JSON.stringify(remoteShowtimes));
+      }
+
+      // 3. Fetch remote tenants
+      const { data: tnRows, error: tnErr } = await supabase.from('tenants').select('*');
+      if (!tnErr && tnRows && tnRows.length > 0) {
+        const remoteTenants = tnRows.map(mapTenantFromDb);
+        localStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(remoteTenants));
+      }
+
+      // 4. Fetch remote halls
+      const { data: hlRows, error: hlErr } = await supabase.from('halls').select('*');
+      if (!hlErr && hlRows && hlRows.length > 0) {
+        const remoteHalls = hlRows.map((h: any) => ({
+          id: h.id,
+          tenantId: h.tenant_id,
+          name: h.name,
+          island: h.island,
+          atoll: h.atoll,
+          address: h.address || '',
+          contactPhone: h.contact_phone || ''
+        }));
+        localStorage.setItem(STORAGE_KEYS.HALLS, JSON.stringify(remoteHalls));
+      }
+
+      // 5. Fetch remote screens
+      const { data: scRows, error: scErr } = await supabase.from('screens').select('*');
+      if (!scErr && scRows && scRows.length > 0) {
+        const remoteScreens = scRows.map((s: any) => ({
+          id: s.id,
+          hallId: s.hall_id,
+          tenantId: s.tenant_id,
+          screenName: s.screen_name,
+          screenNumber: s.screen_number || 1,
+          positionInHall: s.position_in_hall || 'center',
+          layout: s.layout
+        }));
+        localStorage.setItem(STORAGE_KEYS.SCREENS, JSON.stringify(remoteScreens));
+      }
+
+      this.notifyListeners();
+    } catch (e) {
+      console.warn('Supabase remote sync failed / offline fallback used:', e);
+    } finally {
+      this.supabaseSyncing = false;
     }
   }
 
@@ -521,14 +675,16 @@ class MaldivianCinemaStore {
         const list: Tenant[] = JSON.parse(data);
         let updated = false;
         list.forEach((t) => {
-          if (t.id === 'tenant-1' && t.ownerEmail !== 'alippalheys@gmail.com') {
-            t.ownerEmail = 'alippalheys@gmail.com';
+          if (t.subscriptionModel === 'monthly' && t.subscriptionPriceMvr !== 249) {
+            t.subscriptionPriceMvr = 249;
             updated = true;
           }
-          if (t.subscriptionModel === 'one_month') {
+          if (t.subscriptionModel === 'one_month' || t.subscriptionModel === 'yearly') {
             t.subscriptionModel = 'yearly';
-            t.subscriptionPriceMvr = 1000;
-            updated = true;
+            if (t.subscriptionPriceMvr !== 499) {
+              t.subscriptionPriceMvr = 499;
+              updated = true;
+            }
           }
         });
         if (updated) {
@@ -567,6 +723,21 @@ class MaldivianCinemaStore {
       list.push(tenant);
     }
     localStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(list));
+
+    if (isSupabaseConfigured()) {
+      supabase.from('tenants').upsert({
+        id: tenant.id,
+        name: tenant.name,
+        slug: tenant.slug,
+        tier: tenant.tier,
+        status: tenant.status,
+        branding: tenant.branding,
+        owner_email: tenant.ownerEmail
+      }).then(({ error }) => {
+        if (error) console.warn('Supabase saveTenant error:', error);
+      });
+    }
+
     this.addLog({
       id: `log-${Date.now()}`,
       type: 'tenant',
@@ -593,14 +764,29 @@ class MaldivianCinemaStore {
         tenant.subscriptionPriceMvr = priceMvr;
       } else {
         if (model === 'weekly') tenant.subscriptionPriceMvr = 149;
-        else if (model === 'monthly') tenant.subscriptionPriceMvr = 499;
-        else if (model === 'yearly' || model === 'one_month') tenant.subscriptionPriceMvr = 1000;
+        else if (model === 'monthly') tenant.subscriptionPriceMvr = 249;
+        else if (model === 'yearly' || model === 'one_month') tenant.subscriptionPriceMvr = 499;
         else tenant.subscriptionPriceMvr = 0;
       }
 
       const daysToAdd = model === 'weekly' ? 7 : (model === 'yearly' || model === 'one_month') ? 365 : 30;
       tenant.subscriptionBillingDate = new Date(Date.now() + daysToAdd * 86400000).toISOString();
       localStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(list));
+
+      if (isSupabaseConfigured()) {
+        supabase.from('tenants').upsert({
+          id: tenant.id,
+          name: tenant.name,
+          slug: tenant.slug,
+          tier: tenant.tier,
+          status: tenant.status,
+          branding: { ...tenant.branding, subscriptionModel: tenant.subscriptionModel, subscriptionPriceMvr: tenant.subscriptionPriceMvr, subscriptionBillingDate: tenant.subscriptionBillingDate },
+          owner_email: tenant.ownerEmail
+        }).then(({ error }) => {
+          if (error) console.warn('Supabase updateTenantSubscription error:', error);
+        });
+      }
+
       this.addLog({
         id: `log-${Date.now()}`,
         type: 'tenant',
@@ -619,6 +805,13 @@ class MaldivianCinemaStore {
     if (tenant) {
       tenant.status = status;
       localStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(list));
+
+      if (isSupabaseConfigured()) {
+        supabase.from('tenants').update({ status }).eq('id', tenantId).then(({ error }) => {
+          if (error) console.warn('Supabase updateTenantStatus error:', error);
+        });
+      }
+
       this.addLog({
         id: `log-${Date.now()}`,
         type: 'tenant',
@@ -654,6 +847,12 @@ class MaldivianCinemaStore {
       const movies = this.getMovies().filter((m) => m.tenantId !== tenantId);
       localStorage.setItem(STORAGE_KEYS.MOVIES, JSON.stringify(movies));
     } catch {}
+
+    if (isSupabaseConfigured()) {
+      supabase.from('tenants').delete().eq('id', tenantId).then(({ error }) => {
+        if (error) console.warn('Supabase deleteTenant error:', error);
+      });
+    }
 
     this.addLog({
       id: `log-${Date.now()}-del`,
@@ -698,7 +897,7 @@ class MaldivianCinemaStore {
       ownerEmail,
       cinemaSlots: newSlotCount,
       subscriptionModel: 'monthly',
-      subscriptionPriceMvr: 499,
+      subscriptionPriceMvr: 249,
       subscriptionBillingDate: new Date(Date.now() + 30 * 86400000).toISOString(),
       createdAt: new Date().toISOString(),
       branding: {
@@ -758,7 +957,7 @@ class MaldivianCinemaStore {
       type: 'tenant',
       tenantId: newTenant.id,
       message: `Additional Cinema Slot Purchased by ${ownerEmail}: "${newTenant.name}" (${newTenant.tenantCode})`,
-      details: `Slots Expanded: ${newSlotCount} / ${newSlotCount} Cinemas. Plan: Monthly MVR 499.`,
+      details: `Slots Expanded: ${newSlotCount} / ${newSlotCount} Cinemas. Plan: Monthly MVR 249.`,
       status: 'success',
       timestamp: new Date().toISOString()
     });
@@ -818,6 +1017,21 @@ class MaldivianCinemaStore {
       list.push(screen);
     }
     localStorage.setItem(STORAGE_KEYS.SCREENS, JSON.stringify(list));
+
+    if (isSupabaseConfigured()) {
+      supabase.from('screens').upsert({
+        id: screen.id,
+        hall_id: screen.hallId,
+        tenant_id: screen.tenantId,
+        screen_name: screen.screenName,
+        screen_number: screen.screenNumber || 1,
+        position_in_hall: screen.positionInHall,
+        layout: screen.layout
+      }).then(({ error }) => {
+        if (error) console.warn('Supabase saveScreen error:', error);
+      });
+    }
+
     this.broadcastSync();
   }
 
@@ -831,14 +1045,24 @@ class MaldivianCinemaStore {
     showtimes = showtimes.filter((st) => st.screenId !== screenId);
     localStorage.setItem(STORAGE_KEYS.SHOWTIMES, JSON.stringify(showtimes));
 
+    if (isSupabaseConfigured()) {
+      supabase.from('screens').delete().eq('id', screenId).then(({ error }) => {
+        if (error) console.warn('Supabase deleteScreen error:', error);
+      });
+    }
+
     this.broadcastSync();
   }
 
   // --- MOVIES ---
-  public getMovies(): Movie[] {
+  public getMovies(tenantId?: string): Movie[] {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.MOVIES);
-      return data ? JSON.parse(data) : INITIAL_MOVIES;
+      const list: Movie[] = data ? JSON.parse(data) : INITIAL_MOVIES;
+      if (tenantId) {
+        return list.filter((m) => !m.tenantId || m.tenantId === tenantId);
+      }
+      return list;
     } catch {
       return INITIAL_MOVIES;
     }
@@ -857,6 +1081,28 @@ class MaldivianCinemaStore {
       list.push(movie);
     }
     localStorage.setItem(STORAGE_KEYS.MOVIES, JSON.stringify(list));
+
+    if (isSupabaseConfigured()) {
+      supabase.from('movies').upsert({
+        id: movie.id,
+        tenant_id: movie.tenantId || null,
+        title_en: movie.titleEn,
+        title_dv: movie.titleDv,
+        synopsis_en: movie.synopsisEn,
+        synopsis_dv: movie.synopsisDv,
+        poster_url: movie.posterUrl,
+        backdrop_url: movie.backdropUrl,
+        duration_minutes: movie.durationMinutes,
+        age_rating: movie.ageRating,
+        trailer_youtube_url: movie.trailerYoutubeUrl,
+        cast_members: movie.cast,
+        genres: movie.genre,
+        release_date: movie.releaseDate
+      }).then(({ error }) => {
+        if (error) console.warn('Supabase saveMovie error:', error);
+      });
+    }
+
     this.addLog({
       id: `log-${Date.now()}`,
       type: 'tenant',
@@ -873,10 +1119,22 @@ class MaldivianCinemaStore {
     list = list.filter((m) => m.id !== movieId);
     localStorage.setItem(STORAGE_KEYS.MOVIES, JSON.stringify(list));
 
+    // Record tombstone so it never re-seeds in fresh browser sessions
+    this.addDeletedTombstone('movie', movieId);
+
     // Clean up showtimes for this movie
     let showtimes = this.getShowtimes();
     showtimes = showtimes.filter((st) => st.movieId !== movieId);
     localStorage.setItem(STORAGE_KEYS.SHOWTIMES, JSON.stringify(showtimes));
+
+    if (isSupabaseConfigured()) {
+      supabase.from('movies').delete().eq('id', movieId).then(({ error }) => {
+        if (error) console.warn('Supabase deleteMovie error:', error);
+      });
+      supabase.from('showtimes').delete().eq('movie_id', movieId).then(({ error }) => {
+        if (error) console.warn('Supabase deleteShowtimes for movie error:', error);
+      });
+    }
 
     this.broadcastSync();
   }
@@ -887,6 +1145,13 @@ class MaldivianCinemaStore {
     if (!movie) return false;
     movie.published = movie.published === false ? true : false;
     localStorage.setItem(STORAGE_KEYS.MOVIES, JSON.stringify(list));
+
+    if (isSupabaseConfigured()) {
+      supabase.from('movies').update({ published: movie.published }).eq('id', movieId).then(({ error }) => {
+        if (error) console.warn('Supabase toggleMoviePublish error:', error);
+      });
+    }
+
     this.addLog({
       id: `log-${Date.now()}`,
       type: 'tenant',
@@ -923,6 +1188,24 @@ class MaldivianCinemaStore {
       list.push(showtime);
     }
     localStorage.setItem(STORAGE_KEYS.SHOWTIMES, JSON.stringify(list));
+
+    if (isSupabaseConfigured()) {
+      supabase.from('showtimes').upsert({
+        id: showtime.id,
+        movie_id: showtime.movieId,
+        screen_id: showtime.screenId,
+        hall_id: showtime.hallId,
+        tenant_id: showtime.tenantId,
+        show_date: showtime.date,
+        start_time: showtime.startTime,
+        end_time: showtime.endTime,
+        price_tiers: showtime.priceTiers,
+        status: showtime.status
+      }).then(({ error }) => {
+        if (error) console.warn('Supabase saveShowtime error:', error);
+      });
+    }
+
     this.broadcastSync();
   }
 
@@ -932,6 +1215,13 @@ class MaldivianCinemaStore {
     if (target) {
       target.status = 'cancelled';
       localStorage.setItem(STORAGE_KEYS.SHOWTIMES, JSON.stringify(list));
+
+      if (isSupabaseConfigured()) {
+        supabase.from('showtimes').update({ status: 'cancelled' }).eq('id', showtimeId).then(({ error }) => {
+          if (error) console.warn('Supabase cancelShowtime error:', error);
+        });
+      }
+
       this.addLog({
         id: `log-${Date.now()}`,
         type: 'tenant',
@@ -950,6 +1240,16 @@ class MaldivianCinemaStore {
     const target = list.find((s) => s.id === showtimeId);
     list = list.filter((s) => s.id !== showtimeId);
     localStorage.setItem(STORAGE_KEYS.SHOWTIMES, JSON.stringify(list));
+
+    // Record tombstone so it never re-seeds in fresh browser sessions
+    this.addDeletedTombstone('showtime', showtimeId);
+
+    if (isSupabaseConfigured()) {
+      supabase.from('showtimes').delete().eq('id', showtimeId).then(({ error }) => {
+        if (error) console.warn('Supabase deleteShowtime error:', error);
+      });
+    }
+
     if (target) {
       this.addLog({
         id: `log-${Date.now()}`,
@@ -1220,7 +1520,7 @@ class MaldivianCinemaStore {
         contactPhone: '+960 791-5544',
         contactEmail: 'youth@fuvahmulah.gov.mv',
         subscriptionPlan: 'monthly',
-        subscriptionPriceMvr: 499,
+        subscriptionPriceMvr: 249,
         paymentMethod: 'bml_transfer',
         channel: 'whatsapp',
         status: 'pending',
@@ -1285,7 +1585,7 @@ class MaldivianCinemaStore {
     localStorage.setItem(STORAGE_KEYS.TENANT_REQUESTS, JSON.stringify(requests));
 
     const slug = req.cinemaName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `tenant-${Date.now()}`;
-    const daysToAdd = req.subscriptionPlan === 'weekly' ? 7 : 30;
+    const daysToAdd = req.subscriptionPlan === 'weekly' ? 7 : (req.subscriptionPlan === 'yearly' || req.subscriptionPlan === 'one_month') ? 365 : 30;
     const newTenant: Tenant = {
       id: `tenant-${Date.now()}`,
       name: req.cinemaName,

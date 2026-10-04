@@ -64,7 +64,7 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
         <Building2 className="w-16 h-16 text-slate-700 mx-auto mb-4" />
         <h2 className="text-xl font-bold text-white mb-2">Cinema Portal Not Found</h2>
         <p className="text-xs text-slate-400 mb-6">
-          The cinema sublink "/t/{tenantSlug}" is not registered on Tickets.mv.
+          The cinema sublink "/t/{tenantSlug}" is not registered on CinemaMV.online.
         </p>
         <Link
           to="/"

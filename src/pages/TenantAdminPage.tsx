@@ -20,12 +20,24 @@ export const TenantAdminPage: React.FC = () => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
     return Boolean(sessionStorage.getItem('mv_tenant_auth'));
   });
+
+  const getInitialTenantId = (): string => {
+    try {
+      const saved = sessionStorage.getItem('mv_tenant_auth');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed?.id) return parsed.id;
+      }
+    } catch {}
+    return '';
+  };
+
   const [loginCode, setLoginCode] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [selectedTenantId, setSelectedTenantId] = useState<string>('tenant-1');
+  const [selectedTenantId, setSelectedTenantId] = useState<string>(getInitialTenantId);
   const [activeTab, setActiveTab] = useState<'screens' | 'scheduler' | 'movies' | 'branding' | 'sales' | 'slips'>('screens');
 
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(null);
@@ -126,9 +138,30 @@ export const TenantAdminPage: React.FC = () => {
     const allT = cinemaStore.getTenants();
     setTenants(allT);
 
-    const activeT = allT.find((t) => t.id === selectedTenantId) || allT[0];
+    const saved = sessionStorage.getItem('mv_tenant_auth');
+    let sessionTenant: Tenant | null = null;
+    if (saved) {
+      try { sessionTenant = JSON.parse(saved); } catch {}
+    }
+
+    // Filter to only cinemas owned by the logged-in organizer
+    const myTenants = sessionTenant
+      ? allT.filter((t) => t.ownerEmail.toLowerCase() === (sessionTenant?.ownerEmail || '').toLowerCase())
+      : allT;
+
+    setTenants(myTenants);
+
+    const activeT = 
+      (selectedTenantId && myTenants.find((t) => t.id === selectedTenantId)) || 
+      myTenants[0] || 
+      sessionTenant;
+
     if (activeT) {
       setCurrentTenant(activeT);
+      if (!selectedTenantId || selectedTenantId !== activeT.id) {
+        setSelectedTenantId(activeT.id);
+      }
+
       setBrandingForm({
         name: activeT.name,
         slug: activeT.slug,
@@ -162,7 +195,8 @@ export const TenantAdminPage: React.FC = () => {
       const sList = cinemaStore.getScreens().filter((s) => s.tenantId === activeT.id);
       setScreens(sList);
 
-      setMovies(cinemaStore.getMovies());
+      // Strictly isolate movies to this tenant or global shared catalogue
+      setMovies(cinemaStore.getMovies(activeT.id));
       setShowtimes(cinemaStore.getShowtimes(activeT.id));
       setBookings(cinemaStore.getBookings(activeT.id));
     }
@@ -264,8 +298,13 @@ export const TenantAdminPage: React.FC = () => {
     e.preventDefault();
     if (!movieForm.titleEn) return;
 
-    cinemaStore.saveMovie(movieForm);
-    setMovies(cinemaStore.getMovies());
+    const movieToSave: Movie = {
+      ...movieForm,
+      tenantId: currentTenant?.id
+    };
+
+    cinemaStore.saveMovie(movieToSave);
+    setMovies(cinemaStore.getMovies(currentTenant?.id));
     setShowMovieEditModal(false);
     alert(`Movie "${movieForm.titleEn}" artwork and details saved successfully!`);
   };
@@ -282,7 +321,7 @@ export const TenantAdminPage: React.FC = () => {
     setCurrentTenant(updated);
     cinemaStore.saveTenant(updated);
     sessionStorage.setItem('mv_tenant_auth', JSON.stringify(updated));
-    alert(`Assigned new random subdomain: ${newSlug}.tickets.mv`);
+    alert(`Assigned new random subdomain: ${newSlug}.cinemamv.online`);
     refreshData();
   };
 
@@ -339,7 +378,7 @@ export const TenantAdminPage: React.FC = () => {
 
     // Free User Limitation: Max 1 Hall
     if ((currentTenant.tier === 'free' || currentTenant.subscriptionModel === 'free_trial') && halls.length >= 1) {
-      alert("Free users are limited to 1 cinema hall. Multi-hall support is available on Paid Plans (Weekly MVR 149 or Monthly MVR 499).");
+      alert("Free users are limited to 1 cinema hall. Multi-hall support is available on Paid Plans (Weekly MVR 149, Monthly MVR 249, or 1-Year Pass MVR 499).");
       return;
     }
 
@@ -367,7 +406,7 @@ export const TenantAdminPage: React.FC = () => {
 
     // Free User Limitation: Max 1 Screen
     if ((currentTenant.tier === 'free' || currentTenant.subscriptionModel === 'free_trial') && screens.length >= 1) {
-      alert("Free users are limited to 1 screen. Multi-screen setups (Screen 1, Screen 2, Screen 3 in shared halls) are available on Paid Plans (Weekly MVR 149 or Monthly MVR 499).");
+      alert("Free users are limited to 1 screen. Multi-screen setups (Screen 1, Screen 2, Screen 3 in shared halls) are available on Paid Plans (Weekly MVR 149, Monthly MVR 249, or 1-Year Pass MVR 499).");
       return;
     }
 
@@ -468,13 +507,13 @@ export const TenantAdminPage: React.FC = () => {
     refreshData();
   };
 
-  // Switch Subscription Model (Weekly, Monthly, One Month Only)
+  // Switch Subscription Model (Weekly, Monthly, 1-Year Pass)
   const handleSwitchSubscription = (model: SubscriptionModel) => {
     if (!currentTenant) return;
-    let price = 499;
+    let price = 249;
     if (model === 'weekly') price = 149;
-    if (model === 'monthly') price = 499;
-    if (model === 'yearly' || model === 'one_month') price = 1000;
+    if (model === 'monthly') price = 249;
+    if (model === 'yearly' || model === 'one_month') price = 499;
     if (model === 'free_trial') price = 0;
 
     cinemaStore.updateTenantSubscription(currentTenant.id, model, price);
@@ -568,7 +607,8 @@ export const TenantAdminPage: React.FC = () => {
       }
     }
 
-    const found = tenants.find(
+    const allTenantsList = cinemaStore.getTenants();
+    const found = allTenantsList.find(
       (t) =>
         t.tenantCode?.toLowerCase() === query ||
         t.ownerEmail.toLowerCase() === query ||
@@ -583,6 +623,7 @@ export const TenantAdminPage: React.FC = () => {
     sessionStorage.setItem('mv_tenant_auth', JSON.stringify(found));
     setSelectedTenantId(found.id);
     setIsAuthenticated(true);
+    refreshData();
   };
 
   const handleTenantLogout = () => {
@@ -625,7 +666,7 @@ export const TenantAdminPage: React.FC = () => {
                 required
                 value={loginCode}
                 onChange={(e) => setLoginCode(e.target.value)}
-                placeholder="e.g. OLY-01 or alippalheys@gmail.com"
+                placeholder="e.g. OLY-01 or organizer@cinemamv.online"
                 className="w-full pl-10 pr-4 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:outline-none focus:border-teal-400"
               />
             </div>
@@ -1222,8 +1263,8 @@ export const TenantAdminPage: React.FC = () => {
                 <span className="text-[10px] uppercase font-bold text-slate-400 block">Current SaaS Plan:</span>
                 <span className="text-sm font-bold text-white">
                   {currentTenant.subscriptionModel === 'weekly' ? 'Weekly Plan (MVR 149 / wk)' :
-                   currentTenant.subscriptionModel === 'yearly' || currentTenant.subscriptionModel === 'one_month' ? '1-Year Annual Pass (MVR 1,000 / yr)' :
-                   currentTenant.subscriptionModel === 'monthly' ? 'Monthly Plan (MVR 499 / mo)' :
+                   currentTenant.subscriptionModel === 'yearly' || currentTenant.subscriptionModel === 'one_month' ? '1-Year Annual Pass (MVR 499 / yr)' :
+                   currentTenant.subscriptionModel === 'monthly' ? 'Monthly Plan (MVR 249 / mo)' :
                    'Free Plan (3-Day Free Trial / Fallback)'}
                 </span>
               </div>
@@ -1265,7 +1306,7 @@ export const TenantAdminPage: React.FC = () => {
                       : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
                   }`}
                 >
-                  Monthly (MVR 499/mo)
+                  Monthly (MVR 249/mo)
                 </button>
                 <button
                   type="button"
@@ -1276,7 +1317,7 @@ export const TenantAdminPage: React.FC = () => {
                       : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
                   }`}
                 >
-                  1-Year Pass (MVR 1,000)
+                  1-Year Pass (MVR 499)
                 </button>
               </div>
             </div>
@@ -1389,7 +1430,7 @@ export const TenantAdminPage: React.FC = () => {
                         <span className="text-[11px] text-slate-400 block mb-1">Assigned Random Subdomain:</span>
                         <div className="flex items-center space-x-2">
                           <span className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-800 text-amber-300 font-mono text-sm font-bold">
-                            {currentTenant.slug}.tickets.mv
+                            {currentTenant.slug}.cinemamv.online
                           </span>
                           <button
                             type="button"
@@ -1409,13 +1450,13 @@ export const TenantAdminPage: React.FC = () => {
                           <span>Need a custom branded domain?</span>
                         </p>
                         <p className="text-[11px] text-slate-300 mt-1">
-                          Free users get random domains. Upgrade to Weekly (MVR 149) or Monthly (MVR 499) to choose your own custom name (e.g. <code>olympus.tickets.mv</code>).
+                          Free users get random domains. Upgrade to Weekly (MVR 149), Monthly (MVR 249), or 1-Year Pass (MVR 499) to choose your own custom name (e.g. <code>olympus.cinemamv.online</code>).
                         </p>
                       </div>
                     </div>
 
                     <div className="text-[11px] text-slate-400">
-                      Public sublink: <Link to={`/t/${currentTenant.slug}`} target="_blank" className="font-mono text-teal-400 hover:underline">tickets.mv/t/{currentTenant.slug} ↗</Link>
+                      Public sublink: <Link to={`/t/${currentTenant.slug}`} target="_blank" className="font-mono text-teal-400 hover:underline">cinemamv.online/t/{currentTenant.slug} ↗</Link>
                     </div>
                   </div>
                 ) : (
@@ -1437,7 +1478,7 @@ export const TenantAdminPage: React.FC = () => {
                           placeholder="your-cinema-name"
                           className="px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-teal-300 font-mono font-bold text-sm focus:outline-none focus:border-teal-400 w-full sm:w-64"
                         />
-                        <span className="text-xs text-slate-400 font-mono font-bold">.tickets.mv</span>
+                        <span className="text-xs text-slate-400 font-mono font-bold">.cinemamv.online</span>
                       </div>
                     </div>
 
@@ -1447,7 +1488,7 @@ export const TenantAdminPage: React.FC = () => {
                         cinemaStore.isSlugAvailable(brandingForm.slug, currentTenant.id) ? (
                           <div className="text-emerald-400 flex items-center space-x-1.5 font-semibold">
                             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
-                            <span>"{brandingForm.slug}.tickets.mv" is available and can be saved!</span>
+                            <span>"{brandingForm.slug}.cinemamv.online" is available and can be saved!</span>
                           </div>
                         ) : (
                           <div className="text-rose-400 flex items-center space-x-1.5 font-semibold">
@@ -1461,7 +1502,7 @@ export const TenantAdminPage: React.FC = () => {
                     </div>
 
                     <div className="text-[11px] text-slate-400">
-                      Public sublink: <Link to={`/t/${brandingForm.slug}`} target="_blank" className="font-mono text-teal-400 hover:underline">tickets.mv/t/{brandingForm.slug} ↗</Link>
+                      Public sublink: <Link to={`/t/${brandingForm.slug}`} target="_blank" className="font-mono text-teal-400 hover:underline">cinemamv.online/t/{brandingForm.slug} ↗</Link>
                     </div>
                   </div>
                 )}
@@ -2257,7 +2298,7 @@ export const TenantAdminPage: React.FC = () => {
             <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/10 via-slate-950 to-teal-500/10 border border-amber-500/30 flex items-center justify-between">
               <div>
                 <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Slot Fee</span>
-                <span className="text-lg font-black text-amber-300">MVR 499</span>
+                <span className="text-lg font-black text-amber-300">MVR 249</span>
                 <span className="text-xs text-slate-400"> / month</span>
               </div>
               <span className="px-2.5 py-1 rounded-lg bg-teal-500/20 text-teal-300 border border-teal-500/30 text-xs font-bold">
