@@ -172,7 +172,7 @@ export const CheckoutPage: React.FC = () => {
     };
 
     const sessionId = cinemaStore.getOrCreateSessionId();
-    const result = cinemaStore.createBooking(newBooking, sessionId);
+    const result = await cinemaStore.createBookingAsync(newBooking, sessionId);
 
     if (!result.success) {
       setFormError(result.error || 'Failed to complete booking. Seats may have just been booked.');

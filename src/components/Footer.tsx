@@ -28,22 +28,22 @@ export const Footer: React.FC = () => {
           {/* Col 2: Island Cinema Hubs */}
           <div className="space-y-2">
             <h4 className="text-xs font-bold uppercase tracking-wider text-slate-200">
-              Featured Island Cinemas
+              Quick Links
             </h4>
             <ul className="space-y-1.5">
               <li>
-                <Link to="/t/olympus" className="hover:text-teal-300 transition">
-                  Olympus Cinema (Malé City)
+                <Link to="/" className="hover:text-teal-300 transition">
+                  Browse Cinemas &amp; Movies
                 </Link>
               </li>
               <li>
-                <Link to="/t/noonu-velidhoo-hall" className="hover:text-teal-300 transition">
-                  Velidhoo Cinema Hall (Noonu Atoll)
+                <Link to="/admin" className="hover:text-teal-300 transition">
+                  Host Your Cinema (Organizers)
                 </Link>
               </li>
               <li>
-                <Link to="/t/kulhudhuffushi-screen1" className="hover:text-teal-300 transition">
-                  Kulhudhuffushi City Theater (HDh)
+                <Link to="/validator" className="hover:text-teal-300 transition">
+                  Door Ticket Scanner
                 </Link>
               </li>
             </ul>

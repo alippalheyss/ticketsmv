@@ -11,7 +11,7 @@ import {
 export const ValidatorPage: React.FC = () => {
   const { t, formatCurrency } = useLanguage();
   const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [selectedTenantId, setSelectedTenantId] = useState<string>('tenant-1');
+  const [selectedTenantId, setSelectedTenantId] = useState<string>('');
   const [manualCode, setManualCode] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -35,7 +35,13 @@ export const ValidatorPage: React.FC = () => {
   const scannerRef = useRef<Html5Qrcode | null>(null);
 
   useEffect(() => {
-    setTenants(cinemaStore.getTenants());
+    const load = () => {
+      const list = cinemaStore.getTenants();
+      setTenants(list);
+      setSelectedTenantId((cur) => (cur && list.some((x) => x.id === cur) ? cur : (list[0]?.id || '')));
+    };
+    load();
+    return cinemaStore.subscribe(load);
   }, []);
 
   // Web Audio synth for instant door beep

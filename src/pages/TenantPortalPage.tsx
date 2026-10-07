@@ -30,86 +30,38 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
       return;
     }
 
-    const loadTenant = async () => {
-      let tFound = cinemaStore.getTenantBySlug(tenantSlug);
-      if (!tFound) {
-        // 1. Attempt cloud sync from Supabase if configured
-        await cinemaStore.syncFromSupabase();
-        tFound = cinemaStore.getTenantBySlug(tenantSlug);
+    let cancelled = false;
+
+    // Reads the (cloud-synced) store and pushes it into component state.
+    const refresh = () => {
+      if (cancelled) return;
+      const found = cinemaStore.getTenantBySlug(tenantSlug);
+      if (found) {
+        setTenant(found);
+        setHalls(cinemaStore.getHalls(found.id));
+        setScreens(cinemaStore.getScreens().filter((s) => s.tenantId === found.id));
+        setMovies(cinemaStore.getMovies(found.id).filter((m) => m.published !== false));
+        setShowtimes(cinemaStore.getShowtimes(found.id));
+      } else {
+        setTenant(null);
+        setHalls([]);
+        setScreens([]);
+        setMovies([]);
+        setShowtimes([]);
       }
-
-      // 2. If still not found and running on a custom subdomain, request sync from apex domain bridge
-      if (!tFound && typeof window !== 'undefined') {
-        const isSubdomain = window.location.hostname.includes('.cinemamv.online') || 
-          (window.location.hostname.endsWith('.localhost') && window.location.hostname !== 'localhost');
-
-        if (isSubdomain) {
-          const bridgeOrigin = window.location.hostname.includes('.localhost')
-            ? `http://localhost:${window.location.port || '5173'}`
-            : 'https://cinemamv.online';
-
-          const handleBridgeMessage = (ev: MessageEvent) => {
-            if (ev.data && ev.data.type === 'CINEMAMV_SYNC_PAYLOAD' && ev.data.payload) {
-              cinemaStore.importSyncPayload(ev.data.payload);
-              const syncedTenant = cinemaStore.getTenantBySlug(tenantSlug);
-              if (syncedTenant) {
-                setTenant(syncedTenant);
-                setHalls(cinemaStore.getHalls(syncedTenant.id));
-                setScreens(cinemaStore.getScreens().filter((s) => s.tenantId === syncedTenant.id));
-                setMovies(cinemaStore.getMovies(syncedTenant.id).filter((m) => m.published !== false));
-                setShowtimes(cinemaStore.getShowtimes(syncedTenant.id));
-                setLoading(false);
-              }
-            }
-          };
-
-          window.addEventListener('message', handleBridgeMessage);
-
-          let frame = document.getElementById('cinemamv-bridge') as HTMLIFrameElement;
-          if (!frame) {
-            frame = document.createElement('iframe');
-            frame.id = 'cinemamv-bridge';
-            frame.style.display = 'none';
-            frame.src = `${bridgeOrigin}/sync-bridge.html`;
-            document.body.appendChild(frame);
-          } else {
-            frame.contentWindow?.postMessage({ type: 'CINEMAMV_REQUEST_SYNC' }, '*');
-          }
-
-          setTimeout(() => {
-            window.removeEventListener('message', handleBridgeMessage);
-            setLoading(false);
-          }, 1200);
-          return;
-        }
-      }
-
-      if (tFound) {
-        setTenant(tFound);
-        setHalls(cinemaStore.getHalls(tFound.id));
-        setScreens(cinemaStore.getScreens().filter((s) => s.tenantId === tFound.id));
-        setMovies(cinemaStore.getMovies(tFound.id).filter((m) => m.published !== false));
-        setShowtimes(cinemaStore.getShowtimes(tFound.id));
-      }
-      setLoading(false);
+      // Only stop the spinner once the first live cloud download has completed,
+      // so visitors never see stale cached shows or a false "not found".
+      if (cinemaStore.isReady()) setLoading(false);
     };
 
-    loadTenant();
-
-    const unsub = cinemaStore.subscribe(() => {
-      if (tenantSlug) {
-        const updated = cinemaStore.getTenantBySlug(tenantSlug);
-        if (updated) {
-          setTenant(updated);
-          setHalls(cinemaStore.getHalls(updated.id));
-          setScreens(cinemaStore.getScreens().filter((s) => s.tenantId === updated.id));
-          setMovies(cinemaStore.getMovies(updated.id).filter((m) => m.published !== false));
-          setShowtimes(cinemaStore.getShowtimes(updated.id));
-          setLoading(false);
-        }
-      }
-    });
-    return () => unsub();
+    refresh();
+    cinemaStore.whenReady().then(refresh);
+    // Every realtime insert/update/delete from Supabase triggers this.
+    const unsub = cinemaStore.subscribe(refresh);
+    return () => {
+      cancelled = true;
+      unsub();
+    };
   }, [tenantSlug]);
 
   if (loading) {
@@ -133,7 +85,7 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
         </div>
         <h2 className="text-xl font-bold text-white tracking-tight">Cinema Portal Not Found</h2>
         <p className="text-xs text-slate-400 leading-relaxed">
-          The cinema subdomain <span className="font-mono text-amber-300 font-bold">"{tenantSlug}.cinemamv.online"</span> is not registered or is still synchronizing.
+          The cinema subdomain <span className="font-mono text-amber-300 font-bold">"{tenantSlug}.cinemamv.online"</span> is not registered on CinemaMV.online.
         </p>
         <div className="flex flex-col sm:flex-row gap-2.5 justify-center pt-2">
           {isSubdomainHost && (
