@@ -9,6 +9,7 @@ import {
 import { cinemaStore } from '../services/store';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Tenant, TenantRegistrationRequest, Hall, Screen } from '../types';
+import { MALDIVES_ATOLLS, getIslandsByAtoll } from '../data/maldivesLocations';
 
 export const AdminHubPage: React.FC = () => {
   const navigate = useNavigate();
@@ -21,14 +22,17 @@ export const AdminHubPage: React.FC = () => {
   const [isFreeTrialModalOpen, setIsFreeTrialModalOpen] = useState(false);
   const [selectedPlanForRegister, setSelectedPlanForRegister] = useState<'weekly' | 'monthly' | 'yearly' | 'one_month'>('monthly');
 
-  // Free trial form state (free user with limitations)
+  // Free trial form state (free user with limitations + password credentials)
   const [trialCinemaName, setTrialCinemaName] = useState('');
-  const [trialIsland, setTrialIsland] = useState('');
-  const [trialAtoll, setTrialAtoll] = useState('');
+  const [trialAtoll, setTrialAtoll] = useState('Kaafu (K)');
+  const [trialIsland, setTrialIsland] = useState('Malé City');
   const [trialOwnerName, setTrialOwnerName] = useState('');
-  const [trialOwnerPhone, setTrialOwnerPhone] = useState('');
+  const [trialOwnerPhone, setTrialOwnerPhone] = useState('+960 ');
   const [trialOwnerEmail, setTrialOwnerEmail] = useState('');
+  const [trialPassword, setTrialPassword] = useState('');
+  const [trialConfirmPassword, setTrialConfirmPassword] = useState('');
   const [trialFormError, setTrialFormError] = useState('');
+  const [isSubmittingTrial, setIsSubmittingTrial] = useState(false);
 
   // Login form state
   const [loginIdentifier, setLoginIdentifier] = useState('');
@@ -39,9 +43,9 @@ export const AdminHubPage: React.FC = () => {
   const [cinemaName, setCinemaName] = useState('');
   const [ownerName, setOwnerName] = useState('');
   const [ownerEmail, setOwnerEmail] = useState('');
-  const [ownerPhone, setOwnerPhone] = useState('');
-  const [island, setIsland] = useState('');
-  const [atoll, setAtoll] = useState('');
+  const [ownerPhone, setOwnerPhone] = useState('+960 ');
+  const [island, setIsland] = useState('Malé City');
+  const [atoll, setAtoll] = useState('Kaafu (K)');
   const [chosenPaymentMethod, setChosenPaymentMethod] = useState<'bml_transfer' | 'bml_gateway' | 'mfaisaa' | 'cash'>('bml_transfer');
   const [registrationSubmitted, setRegistrationSubmitted] = useState<TenantRegistrationRequest | null>(null);
 
@@ -69,6 +73,7 @@ export const AdminHubPage: React.FC = () => {
       sessionStorage.setItem('mv_tenant_auth', JSON.stringify(customTenant));
       setCurrentSessionTenant(customTenant);
       setIsLoginModalOpen(false);
+      navigate('/tenant-admin');
       return;
     }
 
@@ -78,14 +83,23 @@ export const AdminHubPage: React.FC = () => {
       return;
     }
 
+    if (!loginPassword) {
+      setLoginError('Please enter your account password');
+      return;
+    }
+
+    let authPassed = false;
     if (isSupabaseConfigured() && query.includes('@')) {
-      const { error } = await supabase.auth.signInWithPassword({
-        email: query,
-        password: loginPassword
-      });
-      if (error) {
-        setLoginError(error.message);
-        return;
+      try {
+        const { data: sData, error: sErr } = await supabase.auth.signInWithPassword({
+          email: query,
+          password: loginPassword
+        });
+        if (!sErr && sData.user) {
+          authPassed = true;
+        }
+      } catch (err) {
+        console.warn('Supabase auth sign in error:', err);
       }
     }
 
@@ -101,9 +115,15 @@ export const AdminHubPage: React.FC = () => {
       return;
     }
 
+    if (!authPassed && found.passwordHash && found.passwordHash !== loginPassword) {
+      setLoginError('Incorrect password. Please verify your password and try again.');
+      return;
+    }
+
     sessionStorage.setItem('mv_tenant_auth', JSON.stringify(found));
     setCurrentSessionTenant(found);
     setIsLoginModalOpen(false);
+    navigate('/tenant-admin');
   };
 
   const handleLogout = () => {
@@ -113,11 +133,55 @@ export const AdminHubPage: React.FC = () => {
     setLoginPassword('');
   };
 
-  const handleCreateFreeTrial = (e: React.FormEvent) => {
+  const handleCreateFreeTrial = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!trialCinemaName.trim() || !trialOwnerPhone.trim()) {
-      setTrialFormError('Please enter your Cinema / Hall name and Maldivian contact phone number.');
+    setTrialFormError('');
+
+    if (!trialCinemaName.trim()) {
+      setTrialFormError('Please enter your Cinema / Hall name.');
       return;
+    }
+
+    if (!trialIsland.trim()) {
+      setTrialFormError('Please select your island from the dropdown.');
+      return;
+    }
+
+    if (!trialOwnerPhone.trim() || trialOwnerPhone.trim() === '+960') {
+      setTrialFormError('Please enter a valid Maldivian contact phone number.');
+      return;
+    }
+
+    if (!trialOwnerEmail.trim() || !trialOwnerEmail.includes('@') || !trialOwnerEmail.includes('.')) {
+      setTrialFormError('Please enter a valid email address for your organizer account login.');
+      return;
+    }
+
+    if (!trialPassword || trialPassword.length < 6) {
+      setTrialFormError('Password must be at least 6 characters long.');
+      return;
+    }
+
+    if (trialPassword !== trialConfirmPassword) {
+      setTrialFormError('Passwords do not match. Please re-type your password correctly.');
+      return;
+    }
+
+    setIsSubmittingTrial(true);
+
+    // If Supabase Auth is configured, register the user account in Supabase
+    if (isSupabaseConfigured()) {
+      try {
+        const { error: sAuthErr } = await supabase.auth.signUp({
+          email: trialOwnerEmail.trim().toLowerCase(),
+          password: trialPassword
+        });
+        if (sAuthErr && !sAuthErr.message.toLowerCase().includes('already registered')) {
+          console.warn('Supabase auth notice:', sAuthErr.message);
+        }
+      } catch (err) {
+        console.warn('Supabase auth signup error:', err);
+      }
     }
 
     // Generate random slug for free user e.g. "hall-482"
@@ -136,16 +200,17 @@ export const AdminHubPage: React.FC = () => {
       subscriptionPriceMvr: 0,
       subscriptionBillingDate: new Date(Date.now() + 3 * 86400000).toISOString(),
       createdAt: new Date().toISOString(),
-      ownerEmail: trialOwnerEmail.trim() || `${randomSlug}@trial.cinemamv.online`,
+      ownerEmail: trialOwnerEmail.trim().toLowerCase(),
+      passwordHash: trialPassword,
       branding: {
         logoUrl: '',
         bannerUrl: 'https://images.unsplash.com/photo-1489599849927-2ee91cede3ba?w=1200&auto=format&fit=crop&q=80',
         primaryColor: '#0d9488',
         contactPhone: trialOwnerPhone.trim(),
         contactViber: trialOwnerPhone.trim(),
-        island: trialIsland.trim() || 'Malé',
-        atoll: trialAtoll.trim() || 'Kaafu',
-        terms: '3-Day Free Trial Account (Limited to 1 Hall, 1 Screen, up to 100 seats).',
+        island: trialIsland.trim(),
+        atoll: trialAtoll.trim(),
+        terms: '3-Day Free Trial Account (Limited to 1 Hall, 1 Screen, up to 100 seats). Upgrade anytime with zero lock-in.',
         taglineEn: 'Island Cinema (Free Trial)',
         taglineDv: 'ރަށު ސިނަމާ (ޓްރަޔަލް)'
       }
@@ -156,9 +221,9 @@ export const AdminHubPage: React.FC = () => {
       id: `hall-${Date.now()}`,
       tenantId: newTenantId,
       name: `${trialCinemaName.trim()} Main Hall`,
-      island: trialIsland.trim() || 'Malé',
-      atoll: trialAtoll.trim() || 'Kaafu',
-      address: `${trialIsland.trim() || 'Malé'}, Maldives`,
+      island: trialIsland.trim(),
+      atoll: trialAtoll.trim(),
+      address: `${trialIsland.trim()}, Maldives`,
       contactPhone: trialOwnerPhone.trim()
     };
 
@@ -196,6 +261,7 @@ export const AdminHubPage: React.FC = () => {
     sessionStorage.setItem('mv_tenant_auth', JSON.stringify(newTenant));
     setCurrentSessionTenant(newTenant);
     setIsFreeTrialModalOpen(false);
+    setIsSubmittingTrial(false);
     navigate('/tenant-admin');
   };
 
@@ -1002,39 +1068,63 @@ export const AdminHubPage: React.FC = () => {
                       onChange={(e: any) => setChosenPaymentMethod(e.target.value)}
                       className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
                     >
-                      <option value="bml_transfer">Bank of Maldives (BML) Direct Account Transfer</option>
-                      <option value="bml_gateway">BML Payment Gateway (Debit / Credit Card)</option>
-                      <option value="mfaisaa">Dhiraagu m-Faisaa Mobile Pay</option>
+                      <option value="bml_transfer">Direct BML / MIB Bank Transfer (Slip Upload)</option>
                       <option value="cash">Cash Payment at Office Counter</option>
                     </select>
                   </div>
 
-                  {/* Cinema Name & Island */}
+                  {/* Cinema Name & Location */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      Cinema / Hall Name *
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={cinemaName}
+                      onChange={(e) => setCinemaName(e.target.value)}
+                      placeholder="e.g. Dhuvaafaru Cinema"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                    />
+                  </div>
+
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
                       <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                        Cinema / Hall Name *
+                        Atoll *
                       </label>
-                      <input
-                        type="text"
-                        required
-                        value={cinemaName}
-                        onChange={(e) => setCinemaName(e.target.value)}
-                        placeholder="e.g. Dhuvaafaru Cinema"
+                      <select
+                        value={atoll}
+                        onChange={(e) => {
+                          const newAtoll = e.target.value;
+                          setAtoll(newAtoll);
+                          const isles = getIslandsByAtoll(newAtoll);
+                          setIsland(isles[0] || '');
+                        }}
                         className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
-                      />
+                      >
+                        {MALDIVES_ATOLLS.map((a) => (
+                          <option key={a.code} value={a.name}>
+                            {a.name}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                     <div>
                       <label className="block text-[11px] font-bold text-slate-300 mb-1">
-                        Island & Atoll
+                        Island *
                       </label>
-                      <input
-                        type="text"
+                      <select
                         value={island}
                         onChange={(e) => setIsland(e.target.value)}
-                        placeholder="e.g. R. Dhuvaafaru"
                         className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
-                      />
+                      >
+                        {getIslandsByAtoll(atoll).map((isle) => (
+                          <option key={isle} value={isle}>
+                            {isle}
+                          </option>
+                        ))}
+                      </select>
                     </div>
                   </div>
 
@@ -1182,28 +1272,40 @@ export const AdminHubPage: React.FC = () => {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">
-                    Island *
+                    Atoll *
                   </label>
-                  <input
-                    type="text"
-                    required
-                    value={trialIsland}
-                    onChange={(e) => setTrialIsland(e.target.value)}
-                    placeholder="e.g. Dhidhdhoo or Malé"
+                  <select
+                    value={trialAtoll}
+                    onChange={(e) => {
+                      const newAtoll = e.target.value;
+                      setTrialAtoll(newAtoll);
+                      const isles = getIslandsByAtoll(newAtoll);
+                      setTrialIsland(isles[0] || '');
+                    }}
                     className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
-                  />
+                  >
+                    {MALDIVES_ATOLLS.map((a) => (
+                      <option key={a.code} value={a.name}>
+                        {a.name}
+                      </option>
+                    ))}
+                  </select>
                 </div>
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">
-                    Atoll
+                    Island *
                   </label>
-                  <input
-                    type="text"
-                    value={trialAtoll}
-                    onChange={(e) => setTrialAtoll(e.target.value)}
-                    placeholder="e.g. Haa Alif (HA)"
+                  <select
+                    value={trialIsland}
+                    onChange={(e) => setTrialIsland(e.target.value)}
                     className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
-                  />
+                  >
+                    {getIslandsByAtoll(trialAtoll).map((isle) => (
+                      <option key={isle} value={isle}>
+                        {isle}
+                      </option>
+                    ))}
+                  </select>
                 </div>
               </div>
 
@@ -1216,7 +1318,7 @@ export const AdminHubPage: React.FC = () => {
                     type="text"
                     value={trialOwnerName}
                     onChange={(e) => setTrialOwnerName(e.target.value)}
-                    placeholder="Your Name"
+                    placeholder="Your Full Name"
                     className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
                   />
                 </div>
@@ -1229,7 +1331,7 @@ export const AdminHubPage: React.FC = () => {
                     required
                     value={trialOwnerPhone}
                     onChange={(e) => setTrialOwnerPhone(e.target.value)}
-                    placeholder="e.g. 7771234"
+                    placeholder="+960 7771234"
                     className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
                   />
                 </div>
@@ -1237,10 +1339,11 @@ export const AdminHubPage: React.FC = () => {
 
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">
-                  Email Address (Optional)
+                  Organizer Email Address (For Login) *
                 </label>
                 <input
                   type="email"
+                  required
                   value={trialOwnerEmail}
                   onChange={(e) => setTrialOwnerEmail(e.target.value)}
                   placeholder="e.g. cinema@cinemamv.online"
@@ -1248,12 +1351,44 @@ export const AdminHubPage: React.FC = () => {
                 />
               </div>
 
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Account Password *
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    value={trialPassword}
+                    onChange={(e) => setTrialPassword(e.target.value)}
+                    placeholder="At least 6 characters"
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">
+                    Confirm Password *
+                  </label>
+                  <input
+                    type="password"
+                    required
+                    minLength={6}
+                    value={trialConfirmPassword}
+                    onChange={(e) => setTrialConfirmPassword(e.target.value)}
+                    placeholder="Re-type password"
+                    className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                  />
+                </div>
+              </div>
+
               <button
                 type="submit"
-                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-400 hover:from-teal-400 hover:to-cyan-300 text-slate-950 font-black text-xs shadow-xl shadow-teal-500/25 transition active:scale-95 flex items-center justify-center space-x-2"
+                disabled={isSubmittingTrial}
+                className="w-full py-3.5 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-400 hover:from-teal-400 hover:to-cyan-300 text-slate-950 font-black text-xs shadow-xl shadow-teal-500/25 transition active:scale-95 flex items-center justify-center space-x-2 disabled:opacity-50"
               >
                 <Sparkles className="w-4 h-4 fill-slate-950" />
-                <span>Activate Free Trial & Enter Portal →</span>
+                <span>{isSubmittingTrial ? 'Registering Account...' : 'Register Account & Enter Portal →'}</span>
               </button>
 
               <p className="text-[11px] text-center text-slate-500">

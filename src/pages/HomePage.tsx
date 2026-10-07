@@ -10,6 +10,7 @@ import {
   Compass, Globe, ChevronDown
 } from 'lucide-react';
 import { getYouTubeEmbedUrl, getDirectYouTubeWatchUrl } from '../lib/youtube';
+import { MALDIVES_ATOLLS, getIslandsByAtoll } from '../data/maldivesLocations';
 
 export const HomePage: React.FC = () => {
   const { t, formatCurrency, isDhivehi } = useLanguage();
@@ -36,12 +37,12 @@ export const HomePage: React.FC = () => {
     contactPhone: string;
     contactEmail: string;
     subscriptionPlan: 'weekly' | 'monthly' | 'yearly' | 'one_month';
-    paymentMethod: 'bml_transfer' | 'bml_gateway' | 'mfaisaa' | 'cash';
+    paymentMethod: 'bml_transfer' | 'cash';
     notes: string;
   }>({
     cinemaName: '',
     atoll: 'Kaafu (K)',
-    island: '',
+    island: 'Malé',
     contactPerson: '',
     contactPhone: '',
     contactEmail: '',
@@ -708,25 +709,39 @@ export const HomePage: React.FC = () => {
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1">Atoll *</label>
-                    <input
-                      type="text"
-                      required
+                    <select
                       value={reqForm.atoll}
-                      onChange={(e) => setReqForm({ ...reqForm, atoll: e.target.value })}
-                      placeholder="e.g. Kaafu (K)"
+                      onChange={(e) => {
+                        const newAtoll = e.target.value;
+                        const islands = getIslandsByAtoll(newAtoll);
+                        setReqForm({
+                          ...reqForm,
+                          atoll: newAtoll,
+                          island: islands[0] || ''
+                        });
+                      }}
                       className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
-                    />
+                    >
+                      {MALDIVES_ATOLLS.map((atoll) => (
+                        <option key={atoll.code} value={atoll.name}>
+                          {atoll.name}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-slate-300 mb-1">Island *</label>
-                    <input
-                      type="text"
-                      required
+                    <select
                       value={reqForm.island}
                       onChange={(e) => setReqForm({ ...reqForm, island: e.target.value })}
-                      placeholder="e.g. Maafushi"
                       className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
-                    />
+                    >
+                      {getIslandsByAtoll(reqForm.atoll).map((isl) => (
+                        <option key={isl} value={isl}>
+                          {isl}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                 </div>
 
@@ -830,9 +845,7 @@ export const HomePage: React.FC = () => {
                     onChange={(e) => setReqForm({ ...reqForm, paymentMethod: e.target.value as any })}
                     className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
                   >
-                    <option value="bml_transfer">Direct BML Bank Transfer (Slip Upload)</option>
-                    <option value="bml_gateway">BML Online Payment Gateway</option>
-                    <option value="mfaisaa">DhiraaguPay / Ooredoo m-Faisaa</option>
+                    <option value="bml_transfer">Direct BML / MIB Bank Transfer (Slip Upload)</option>
                     <option value="cash">Cash / Island Council Purchase Order</option>
                   </select>
                 </div>

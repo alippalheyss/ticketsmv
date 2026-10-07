@@ -9,12 +9,14 @@ import {
   Building2, Film, Calendar, Users, Sliders, ExternalLink, Plus, Edit3, 
   Download, DollarSign, Upload, MapPin, Check, Ban, Trash2, LayoutGrid, 
   CreditCard, Sparkles, AlertCircle, AlertTriangle, Copy, Image, Play, CheckCircle2, X, LogOut, Lock, KeyRound,
-  Globe, RefreshCw
+  Globe, RefreshCw, Save
 } from 'lucide-react';
-import { Link } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { MALDIVES_ATOLLS, getIslandsByAtoll } from '../data/maldivesLocations';
 
 export const TenantAdminPage: React.FC = () => {
+  const navigate = useNavigate();
   const { formatCurrency } = useLanguage();
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
@@ -38,7 +40,7 @@ export const TenantAdminPage: React.FC = () => {
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [selectedTenantId, setSelectedTenantId] = useState<string>(getInitialTenantId);
-  const [activeTab, setActiveTab] = useState<'screens' | 'scheduler' | 'movies' | 'branding' | 'sales' | 'slips'>('screens');
+  const [activeTab, setActiveTab] = useState<'screens' | 'scheduler' | 'movies' | 'branding' | 'subscription' | 'sales' | 'slips'>('screens');
 
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(null);
   const [halls, setHalls] = useState<Hall[]>([]);
@@ -107,6 +109,16 @@ export const TenantAdminPage: React.FC = () => {
     qrImageUrl: '',
   });
 
+  // Track initial state for automatic dirty save confirmation detection
+  const [initialBrandingForm, setInitialBrandingForm] = useState<typeof brandingForm | null>(null);
+  const [initialBankForm, setInitialBankForm] = useState<BankDetails | null>(null);
+
+  // Self-Delete Profile State
+  const [showDeleteProfileModal, setShowDeleteProfileModal] = useState(false);
+  const [deleteConfirmCinemaName, setDeleteConfirmCinemaName] = useState('');
+  const [isDeletingProfile, setIsDeletingProfile] = useState(false);
+  const [planChangeMessage, setPlanChangeMessage] = useState<string | null>(null);
+
   // Additional Cinema Slots & Chain Expansion Form
   const [showBuySlotModal, setShowBuySlotModal] = useState(false);
   const [newSlotCinemaName, setNewSlotCinemaName] = useState('');
@@ -162,7 +174,7 @@ export const TenantAdminPage: React.FC = () => {
         setSelectedTenantId(activeT.id);
       }
 
-      setBrandingForm({
+      const newBranding = {
         name: activeT.name,
         slug: activeT.slug,
         island: activeT.branding.island,
@@ -172,19 +184,19 @@ export const TenantAdminPage: React.FC = () => {
         logoUrl: activeT.branding.logoUrl,
         bannerUrl: activeT.branding.bannerUrl,
         terms: activeT.branding.terms,
-      });
+      };
+      setBrandingForm(newBranding);
+      setInitialBrandingForm(newBranding);
 
-      if (activeT.branding.bankDetails) {
-        setBankForm(activeT.branding.bankDetails);
-      } else {
-        setBankForm({
-          bankName: 'Bank of Maldives (BML)',
-          accountNumber: '7701 1928 4401 001',
-          accountName: activeT.name,
-          currency: 'MVR',
-          instructions: 'Please mention booking reference ID in transfer remarks.',
-        });
-      }
+      const newBank = activeT.branding.bankDetails || {
+        bankName: 'Bank of Maldives (BML)',
+        accountNumber: '7701 1928 4401 001',
+        accountName: activeT.name,
+        currency: 'MVR',
+        instructions: 'Please mention booking reference ID in transfer remarks.',
+      };
+      setBankForm(newBank);
+      setInitialBankForm(newBank);
 
       const hList = cinemaStore.getHalls(activeT.id);
       setHalls(hList);
@@ -204,11 +216,40 @@ export const TenantAdminPage: React.FC = () => {
 
   useEffect(() => {
     refreshData();
+    if (selectedTenantId) {
+      cinemaStore.syncBookingsForTenant(selectedTenantId).then((bList) => {
+        if (bList && bList.length > 0) setBookings(bList);
+      });
+    }
     const unsub = cinemaStore.subscribe(() => {
       refreshData();
     });
     return () => unsub();
   }, [selectedTenantId]);
+
+  // Dirty state: automatically true when brandingForm or bankForm has unsaved modifications
+  const isDirty = Boolean(
+    initialBrandingForm && initialBankForm && (
+      JSON.stringify(brandingForm) !== JSON.stringify(initialBrandingForm) ||
+      JSON.stringify(bankForm) !== JSON.stringify(initialBankForm)
+    )
+  );
+
+  const handleDiscardChanges = () => {
+    if (initialBrandingForm) setBrandingForm({ ...initialBrandingForm });
+    if (initialBankForm) setBankForm({ ...initialBankForm });
+  };
+
+  const handleDeleteSelfProfile = () => {
+    if (!currentTenant) return;
+    setIsDeletingProfile(true);
+    cinemaStore.deleteTenant(currentTenant.id);
+    sessionStorage.removeItem('mv_tenant_auth');
+    setShowDeleteProfileModal(false);
+    setIsDeletingProfile(false);
+    alert(`Cinema "${currentTenant.name}" and all records have been permanently deleted.`);
+    navigate('/');
+  };
 
   // Picture Upload Handlers
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -367,6 +408,13 @@ export const TenantAdminPage: React.FC = () => {
     cinemaStore.saveTenant(updated);
     sessionStorage.setItem('mv_tenant_auth', JSON.stringify(updated));
     setCurrentTenant(updated);
+    setInitialBrandingForm({
+      ...brandingForm,
+      slug: targetSlug
+    });
+    setInitialBankForm({
+      ...bankForm
+    });
     alert('Branding, Subdomain, and Bank Details saved successfully!');
     refreshData();
   };
@@ -517,8 +565,14 @@ export const TenantAdminPage: React.FC = () => {
     if (model === 'free_trial') price = 0;
 
     cinemaStore.updateTenantSubscription(currentTenant.id, model, price);
+    const updated = cinemaStore.getTenantById(currentTenant.id);
+    if (updated) {
+      setCurrentTenant(updated);
+      sessionStorage.setItem('mv_tenant_auth', JSON.stringify(updated));
+    }
     refreshData();
-    alert(`Subscription plan updated to: ${model.toUpperCase()} (MVR ${price}). No ticket fees are charged.`);
+    const planName = model === 'free_trial' ? '3-Day Free Trial' : model === 'yearly' || model === 'one_month' ? '1-Year Pass' : `${model.toUpperCase()} Pass`;
+    setPlanChangeMessage(`🎉 Subscription successfully switched to ${planName} (MVR ${price})! All features unlocked with zero commission.`);
   };
 
   // Purchase Extra Cinema Slot & Expand Chain
@@ -808,8 +862,8 @@ export const TenantAdminPage: React.FC = () => {
 
       {/* Navigation Tabs - Mobile First, Zero Horizontal Scroll */}
       <div className="space-y-2 pb-2 border-b border-slate-800">
-        {/* Fixed 6-column icon grid that perfectly fits any mobile screen without horizontal scrolling */}
-        <div className="grid grid-cols-6 gap-1 sm:gap-2 w-full">
+        {/* Fixed 7-column icon grid that perfectly fits any mobile screen without horizontal scrolling */}
+        <div className="grid grid-cols-7 gap-1 sm:gap-1.5 w-full">
           <button
             onClick={() => setActiveTab('screens')}
             title={`Halls & Multi-Screens (${screens.length})`}
@@ -869,7 +923,27 @@ export const TenantAdminPage: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setActiveTab('sales')}
+            onClick={() => setActiveTab('subscription')}
+            title="Subscription Plan & Billing"
+            className={`flex flex-col items-center justify-center py-2.5 sm:py-3 px-1 rounded-xl transition-all duration-200 ${
+              activeTab === 'subscription'
+                ? 'bg-teal-500 text-slate-950 font-bold shadow-lg shadow-teal-500/25 ring-2 ring-teal-400'
+                : 'text-slate-400 hover:text-white hover:bg-slate-900 bg-slate-900/60 border border-slate-800'
+            }`}
+          >
+            <CreditCard className="w-5 h-5 shrink-0" />
+            <span className="text-[10px] font-bold mt-1 leading-none">Plan</span>
+          </button>
+
+          <button
+            onClick={() => {
+              setActiveTab('sales');
+              if (currentTenant?.id) {
+                cinemaStore.syncBookingsForTenant(currentTenant.id).then((bList) => {
+                  if (bList && bList.length > 0) setBookings(bList);
+                });
+              }
+            }}
             title="Attendees & Reports"
             className={`flex flex-col items-center justify-center py-2.5 sm:py-3 px-1 rounded-xl transition-all duration-200 ${
               activeTab === 'sales'
@@ -882,7 +956,14 @@ export const TenantAdminPage: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setActiveTab('slips')}
+            onClick={() => {
+              setActiveTab('slips');
+              if (currentTenant?.id) {
+                cinemaStore.syncBookingsForTenant(currentTenant.id).then((bList) => {
+                  if (bList && bList.length > 0) setBookings(bList);
+                });
+              }
+            }}
             title="Bank Transfer Slips"
             className={`flex flex-col items-center justify-center py-2.5 sm:py-3 px-1 rounded-xl transition-all duration-200 ${
               activeTab === 'slips'
@@ -904,6 +985,7 @@ export const TenantAdminPage: React.FC = () => {
               {activeTab === 'movies' && `Customize Show Pictures & Background (${movies.length})`}
               {activeTab === 'scheduler' && `Showtimes & Cancel/Delete (${showtimes.length})`}
               {activeTab === 'branding' && 'Branding & Bank Details (Picture Upload)'}
+              {activeTab === 'subscription' && 'Subscription Plan & Self-Service Switcher'}
               {activeTab === 'sales' && 'Attendees & Reports'}
               {activeTab === 'slips' && 'Bank Transfer Slips'}
             </span>
@@ -1530,23 +1612,41 @@ export const TenantAdminPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Island</label>
-                <input
-                  type="text"
-                  value={brandingForm.island}
-                  onChange={(e) => setBrandingForm({ ...brandingForm, island: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm"
-                />
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Atoll *</label>
+                <select
+                  value={brandingForm.atoll || 'Kaafu (K)'}
+                  onChange={(e) => {
+                    const newAtoll = e.target.value;
+                    const islands = getIslandsByAtoll(newAtoll);
+                    setBrandingForm({
+                      ...brandingForm,
+                      atoll: newAtoll,
+                      island: islands[0] || brandingForm.island
+                    });
+                  }}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:border-teal-400"
+                >
+                  {MALDIVES_ATOLLS.map((atoll) => (
+                    <option key={atoll.code} value={atoll.name}>
+                      {atoll.name}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Atoll</label>
-                <input
-                  type="text"
-                  value={brandingForm.atoll}
-                  onChange={(e) => setBrandingForm({ ...brandingForm, atoll: e.target.value })}
-                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm"
-                />
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Island *</label>
+                <select
+                  value={brandingForm.island || 'Malé'}
+                  onChange={(e) => setBrandingForm({ ...brandingForm, island: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-sm focus:border-teal-400"
+                >
+                  {getIslandsByAtoll(brandingForm.atoll || 'Kaafu (K)').map((isl) => (
+                    <option key={isl} value={isl}>
+                      {isl}
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
@@ -1668,24 +1768,272 @@ export const TenantAdminPage: React.FC = () => {
             </div>
           </div>
 
-            {/* Platform Policy Notice: No Self-Deletion of Cinema Entities */}
-            <div className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 flex items-start space-x-3 text-xs text-slate-400">
-              <Lock className="w-4 h-4 text-teal-400 shrink-0 mt-0.5" />
+            {/* Danger Zone: Admin Self-Deletion of Cinema Profile */}
+            <div className="p-5 rounded-2xl bg-rose-950/20 border border-rose-500/30 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div className="space-y-1">
-                <span className="font-bold text-slate-200">Cinema Deletion & Decommissioning Policy</span>
-                <p className="leading-relaxed">
-                  Cinema entities cannot be removed from organizer settings to protect active customer bookings and gate verification records. Only Super Admin has authorization to permanently delete or decommission cinemas on the platform. To request cinema deletion, contact <span className="text-teal-400 font-mono font-bold">alippalhey@gmail.com</span>.
+                <div className="flex items-center space-x-2 text-rose-400 font-bold text-sm">
+                  <Trash2 className="w-4 h-4" />
+                  <span>Danger Zone: Delete Cinema Profile</span>
+                </div>
+                <p className="text-xs text-rose-300/80 leading-relaxed max-w-xl">
+                  Permanently delete <strong>{currentTenant.name}</strong>, including all auditoriums, screens, seat arrangements, scheduled showtimes, uploaded movie listings, and portal subdomains.
                 </p>
               </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteConfirmCinemaName('');
+                  setShowDeleteProfileModal(true);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 hover:text-rose-200 border border-rose-500/40 text-xs font-bold transition flex items-center space-x-2 shrink-0 self-start sm:self-auto"
+              >
+                <Trash2 className="w-4 h-4 text-rose-400" />
+                <span>Delete My Cinema</span>
+              </button>
             </div>
 
-            <button
-              type="submit"
-              className="px-8 py-3.5 rounded-2xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold text-sm shadow-xl shadow-teal-500/20 transition active:scale-95"
-            >
-              Save Branding & Bank Details
-            </button>
+            <div className="flex items-center space-x-4">
+              <button
+                type="submit"
+                className="flex items-center space-x-2 px-8 py-3.5 rounded-2xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold text-sm shadow-xl shadow-teal-500/20 transition active:scale-95"
+              >
+                <Save className="w-4 h-4" />
+                <span>Save Branding & Bank Details</span>
+              </button>
+              {isDirty && (
+                <span className="text-xs text-amber-400 font-semibold flex items-center space-x-1.5 animate-pulse">
+                  <AlertCircle className="w-4 h-4" />
+                  <span>Unsaved changes pending confirmation</span>
+                </span>
+              )}
+            </div>
           </form>
+      )}
+
+      {/* TAB: SUBSCRIPTION & PLAN SWITCHER */}
+      {activeTab === 'subscription' && (
+        <div className="space-y-6">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center space-x-2">
+                <CreditCard className="w-5 h-5 text-teal-400" />
+                <span>Subscription Plan & Billing</span>
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Switch your cinema SaaS tier freely at any time. Enjoy zero ticket booking fees and instant portal activation.
+              </p>
+            </div>
+
+            <div className="flex items-center space-x-2">
+              <span className={`px-3 py-1.5 rounded-xl text-xs font-bold border ${
+                currentTenant.tier === 'paid'
+                  ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
+                  : 'bg-amber-500/15 text-amber-300 border-amber-500/30'
+              }`}>
+                {currentTenant.tier === 'paid' ? '⭐ PAID PRO TIER' : '🆓 FREE TIER'}
+              </span>
+            </div>
+          </div>
+
+          {planChangeMessage && (
+            <div className="p-4 rounded-2xl bg-teal-500/20 border border-teal-500/40 text-teal-200 text-xs font-bold flex items-center justify-between animate-in fade-in">
+              <span>{planChangeMessage}</span>
+              <button onClick={() => setPlanChangeMessage(null)} className="text-teal-400 hover:text-white font-bold ml-2">✕</button>
+            </div>
+          )}
+
+          {/* Current Plan Overview Card */}
+          <div className="glass-panel rounded-3xl p-6 border border-slate-800 bg-gradient-to-br from-slate-900/90 to-slate-950/90 space-y-4">
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800">
+                <span className="text-xs text-slate-400 block mb-1">Active Plan</span>
+                <span className="text-lg font-extrabold text-white capitalize">
+                  {currentTenant.subscriptionModel === 'free_trial'
+                    ? '3-Day Free Trial'
+                    : currentTenant.subscriptionModel === 'yearly' || currentTenant.subscriptionModel === 'one_month'
+                    ? '1-Year Pass'
+                    : `${currentTenant.subscriptionModel} Pass`}
+                </span>
+              </div>
+              <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800">
+                <span className="text-xs text-slate-400 block mb-1">Subscription Price</span>
+                <span className="text-lg font-extrabold text-teal-400 font-mono">
+                  {currentTenant.subscriptionPriceMvr === 0 ? 'MVR 0 (Free)' : `MVR ${currentTenant.subscriptionPriceMvr}`}
+                </span>
+              </div>
+              <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800">
+                <span className="text-xs text-slate-400 block mb-1">Billing / Expiry Date</span>
+                <span className="text-sm font-bold text-slate-200">
+                  {currentTenant.subscriptionBillingDate
+                    ? new Date(currentTenant.subscriptionBillingDate).toLocaleDateString(undefined, {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      })
+                    : 'Lifetime / Free'}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* Plan Switcher Cards */}
+          <div>
+            <h3 className="text-sm font-bold text-white mb-3">Choose a Plan to Switch to:</h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Free Trial Card */}
+              <div className={`rounded-2xl p-5 border transition flex flex-col justify-between ${
+                currentTenant.subscriptionModel === 'free_trial'
+                  ? 'bg-slate-900 border-teal-500 ring-2 ring-teal-500/20'
+                  : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
+              }`}>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Free Trial</span>
+                    {currentTenant.subscriptionModel === 'free_trial' && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-500/20 text-teal-300">Active</span>
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-2xl font-black text-white">MVR 0</div>
+                    <div className="text-xs text-slate-500">3-Day Trial</div>
+                  </div>
+                  <ul className="text-xs text-slate-400 space-y-1.5 pt-2 border-t border-slate-800">
+                    <li>✓ 1 Cinema Hall</li>
+                    <li>✓ 1 Screen (up to 100 seats)</li>
+                    <li>✓ Random subdomain</li>
+                    <li>✓ Bank transfer slip uploads</li>
+                  </ul>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSwitchSubscription('free_trial')}
+                  disabled={currentTenant.subscriptionModel === 'free_trial'}
+                  className={`mt-4 w-full py-2.5 rounded-xl text-xs font-bold transition ${
+                    currentTenant.subscriptionModel === 'free_trial'
+                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                      : 'bg-slate-800 hover:bg-slate-700 text-white'
+                  }`}
+                >
+                  {currentTenant.subscriptionModel === 'free_trial' ? 'Current Plan' : 'Switch to Free Trial'}
+                </button>
+              </div>
+
+              {/* Weekly Plan */}
+              <div className={`rounded-2xl p-5 border transition flex flex-col justify-between ${
+                currentTenant.subscriptionModel === 'weekly'
+                  ? 'bg-slate-900 border-teal-500 ring-2 ring-teal-500/20'
+                  : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
+              }`}>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-slate-400 uppercase tracking-wider">Weekly Pass</span>
+                    {currentTenant.subscriptionModel === 'weekly' && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-500/20 text-teal-300">Active</span>
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-2xl font-black text-white">MVR 149</div>
+                    <div className="text-xs text-slate-500">per 7 days</div>
+                  </div>
+                  <ul className="text-xs text-slate-400 space-y-1.5 pt-2 border-t border-slate-800">
+                    <li>✓ Multi-Hall & Multi-Screen</li>
+                    <li>✓ Custom Subdomain</li>
+                    <li>✓ Full Seat Matrix Customization</li>
+                    <li>✓ 0% ticket commission</li>
+                  </ul>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSwitchSubscription('weekly')}
+                  disabled={currentTenant.subscriptionModel === 'weekly'}
+                  className={`mt-4 w-full py-2.5 rounded-xl text-xs font-bold transition ${
+                    currentTenant.subscriptionModel === 'weekly'
+                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                      : 'bg-teal-500 hover:bg-teal-400 text-slate-950 font-black'
+                  }`}
+                >
+                  {currentTenant.subscriptionModel === 'weekly' ? 'Current Plan' : 'Switch to Weekly (MVR 149)'}
+                </button>
+              </div>
+
+              {/* Monthly Plan */}
+              <div className={`rounded-2xl p-5 border transition flex flex-col justify-between ${
+                currentTenant.subscriptionModel === 'monthly'
+                  ? 'bg-slate-900 border-teal-500 ring-2 ring-teal-500/20 shadow-lg shadow-teal-500/10'
+                  : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
+              }`}>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-amber-400 uppercase tracking-wider">★ Most Popular</span>
+                    {currentTenant.subscriptionModel === 'monthly' && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-500/20 text-teal-300">Active</span>
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-2xl font-black text-white">MVR 249</div>
+                    <div className="text-xs text-slate-500">per 30 days</div>
+                  </div>
+                  <ul className="text-xs text-slate-400 space-y-1.5 pt-2 border-t border-slate-800">
+                    <li>✓ Unlimited Screens & Halls</li>
+                    <li>✓ Custom Subdomain</li>
+                    <li>✓ Custom Bank QR Slips</li>
+                    <li>✓ 0% commission forever</li>
+                  </ul>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSwitchSubscription('monthly')}
+                  disabled={currentTenant.subscriptionModel === 'monthly'}
+                  className={`mt-4 w-full py-2.5 rounded-xl text-xs font-bold transition ${
+                    currentTenant.subscriptionModel === 'monthly'
+                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                      : 'bg-teal-500 hover:bg-teal-400 text-slate-950 font-black'
+                  }`}
+                >
+                  {currentTenant.subscriptionModel === 'monthly' ? 'Current Plan' : 'Switch to Monthly (MVR 249)'}
+                </button>
+              </div>
+
+              {/* 1-Year Pass */}
+              <div className={`rounded-2xl p-5 border transition flex flex-col justify-between ${
+                currentTenant.subscriptionModel === 'yearly' || currentTenant.subscriptionModel === 'one_month'
+                  ? 'bg-slate-900 border-teal-500 ring-2 ring-teal-500/20 shadow-lg shadow-teal-500/10'
+                  : 'bg-slate-900/50 border-slate-800 hover:border-slate-700'
+              }`}>
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-bold text-emerald-400 uppercase tracking-wider">💎 Best Value</span>
+                    {(currentTenant.subscriptionModel === 'yearly' || currentTenant.subscriptionModel === 'one_month') && (
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-teal-500/20 text-teal-300">Active</span>
+                    )}
+                  </div>
+                  <div>
+                    <div className="text-2xl font-black text-white">MVR 499</div>
+                    <div className="text-xs text-slate-500">Full 365 Days Access</div>
+                  </div>
+                  <ul className="text-xs text-slate-400 space-y-1.5 pt-2 border-t border-slate-800">
+                    <li>✓ Full Annual Access (365 days)</li>
+                    <li>✓ Unlimited Multi-Hall Setup</li>
+                    <li>✓ Priority Support & Direct Setup</li>
+                    <li>✓ 0% ticket fee</li>
+                  </ul>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => handleSwitchSubscription('yearly')}
+                  disabled={currentTenant.subscriptionModel === 'yearly' || currentTenant.subscriptionModel === 'one_month'}
+                  className={`mt-4 w-full py-2.5 rounded-xl text-xs font-bold transition ${
+                    currentTenant.subscriptionModel === 'yearly' || currentTenant.subscriptionModel === 'one_month'
+                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                      : 'bg-teal-500 hover:bg-teal-400 text-slate-950 font-black'
+                  }`}
+                >
+                  {(currentTenant.subscriptionModel === 'yearly' || currentTenant.subscriptionModel === 'one_month') ? 'Current Plan' : 'Switch to 1-Year Pass (MVR 499)'}
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
       )}
 
       {/* TAB 5: SALES & ATTENDEE REPORTS */}
@@ -2156,26 +2504,37 @@ export const TenantAdminPage: React.FC = () => {
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Island</label>
-                <input
-                  type="text"
-                  required
-                  value={newHallIsland}
-                  onChange={(e) => setNewHallIsland(e.target.value)}
-                  placeholder="e.g. Malé"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm"
-                />
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Atoll *</label>
+                <select
+                  value={newHallAtoll || 'Kaafu (K)'}
+                  onChange={(e) => {
+                    const atoll = e.target.value;
+                    setNewHallAtoll(atoll);
+                    const islands = getIslandsByAtoll(atoll);
+                    setNewHallIsland(islands[0] || '');
+                  }}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:border-teal-400"
+                >
+                  {MALDIVES_ATOLLS.map((atoll) => (
+                    <option key={atoll.code} value={atoll.name}>
+                      {atoll.name}
+                    </option>
+                  ))}
+                </select>
               </div>
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1">Atoll</label>
-                <input
-                  type="text"
-                  required
-                  value={newHallAtoll}
-                  onChange={(e) => setNewHallAtoll(e.target.value)}
-                  placeholder="e.g. Kaafu"
-                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm"
-                />
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Island *</label>
+                <select
+                  value={newHallIsland || 'Malé'}
+                  onChange={(e) => setNewHallIsland(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:border-teal-400"
+                >
+                  {getIslandsByAtoll(newHallAtoll || 'Kaafu (K)').map((isl) => (
+                    <option key={isl} value={isl}>
+                      {isl}
+                    </option>
+                  ))}
+                </select>
               </div>
             </div>
             <div className="flex justify-end space-x-3 pt-3">
@@ -2349,44 +2708,37 @@ export const TenantAdminPage: React.FC = () => {
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-slate-300 mb-1">Island Location *</label>
-                  <input
-                    type="text"
-                    required
-                    value={newSlotIsland}
-                    onChange={(e) => setNewSlotIsland(e.target.value)}
-                    placeholder="e.g. Hulhumalé or Eydhafushi"
-                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:border-amber-400 focus:outline-none"
-                  />
-                </div>
-
-                <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">Atoll *</label>
                   <select
                     value={newSlotAtoll}
-                    onChange={(e) => setNewSlotAtoll(e.target.value)}
+                    onChange={(e) => {
+                      const atoll = e.target.value;
+                      setNewSlotAtoll(atoll);
+                      const islands = getIslandsByAtoll(atoll);
+                      setNewSlotIsland(islands[0] || '');
+                    }}
                     className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:border-amber-400 focus:outline-none"
                   >
-                    <option value="Kaafu (K)">Kaafu (K)</option>
-                    <option value="Alif Alif (AA)">Alif Alif (AA)</option>
-                    <option value="Alif Dhaal (ADh)">Alif Dhaal (ADh)</option>
-                    <option value="Baa (B)">Baa (B)</option>
-                    <option value="Haa Alif (HA)">Haa Alif (HA)</option>
-                    <option value="Haa Dhaalu (HDh)">Haa Dhaalu (HDh)</option>
-                    <option value="Shaviyani (Sh)">Shaviyani (Sh)</option>
-                    <option value="Noonu (N)">Noonu (N)</option>
-                    <option value="Raa (R)">Raa (R)</option>
-                    <option value="Lhaviyani (Lh)">Lhaviyani (Lh)</option>
-                    <option value="Vaavu (V)">Vaavu (V)</option>
-                    <option value="Meemu (M)">Meemu (M)</option>
-                    <option value="Faafu (F)">Faafu (F)</option>
-                    <option value="Dhaalu (Dh)">Dhaalu (Dh)</option>
-                    <option value="Thaa (Th)">Thaa (Th)</option>
-                    <option value="Laamu (L)">Laamu (L)</option>
-                    <option value="Gaafu Alif (GA)">Gaafu Alif (GA)</option>
-                    <option value="Gaafu Dhaalu (GDh)">Gaafu Dhaalu (GDh)</option>
-                    <option value="Gnaviyani (Gn)">Gnaviyani (Gn)</option>
-                    <option value="Seenu (S)">Seenu (S)</option>
+                    {MALDIVES_ATOLLS.map((atoll) => (
+                      <option key={atoll.code} value={atoll.name}>
+                        {atoll.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-300 mb-1">Island *</label>
+                  <select
+                    value={newSlotIsland || 'Malé'}
+                    onChange={(e) => setNewSlotIsland(e.target.value)}
+                    className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:border-amber-400 focus:outline-none"
+                  >
+                    {getIslandsByAtoll(newSlotAtoll || 'Kaafu (K)').map((isl) => (
+                      <option key={isl} value={isl}>
+                        {isl}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -2420,6 +2772,90 @@ export const TenantAdminPage: React.FC = () => {
               </button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* MODAL: DELETE CINEMA PROFILE CONFIRMATION */}
+      {showDeleteProfileModal && currentTenant && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-rose-500/40 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl">
+            <div className="flex items-center space-x-3 text-rose-400">
+              <div className="p-3 rounded-2xl bg-rose-500/20">
+                <AlertTriangle className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="text-lg font-bold text-white">Delete Cinema Profile</h3>
+                <p className="text-xs text-slate-400">This action cannot be undone</p>
+              </div>
+            </div>
+
+            <p className="text-xs text-slate-300 leading-relaxed">
+              Are you sure you want to delete <strong>{currentTenant.name}</strong>? This will permanently purge your cinema profile, all auditoriums, screens, seat arrangements, scheduled showtimes, uploaded movie listings, and custom subdomains.
+            </p>
+
+            <div className="space-y-1.5">
+              <label className="block text-xs font-semibold text-slate-400">
+                Type <span className="font-mono font-bold text-rose-300">{currentTenant.name}</span> to confirm:
+              </label>
+              <input
+                type="text"
+                value={deleteConfirmCinemaName}
+                onChange={(e) => setDeleteConfirmCinemaName(e.target.value)}
+                placeholder={currentTenant.name}
+                className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:border-rose-400"
+              />
+            </div>
+
+            <div className="flex justify-end space-x-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setShowDeleteProfileModal(false)}
+                className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-700"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={deleteConfirmCinemaName.trim().toLowerCase() !== currentTenant.name.trim().toLowerCase() || isDeletingProfile}
+                onClick={handleDeleteSelfProfile}
+                className="px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-500 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-xs shadow-lg shadow-rose-600/30 transition"
+              >
+                {isDeletingProfile ? 'Deleting...' : 'Permanently Delete'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* FLOATING CONFIRMATION SAVE BAR: APPEARS AUTOMATICALLY ON DIRTY CHANGES */}
+      {isDirty && (
+        <div className="fixed bottom-6 inset-x-4 max-w-2xl mx-auto z-50 bg-slate-900/95 border-2 border-teal-500 rounded-2xl p-4 shadow-2xl backdrop-blur-md flex items-center justify-between gap-4 animate-in fade-in slide-in-from-bottom-4 duration-300">
+          <div className="flex items-center space-x-3 min-w-0">
+            <div className="w-10 h-10 rounded-xl bg-teal-500/20 text-teal-400 flex items-center justify-center shrink-0">
+              <Sparkles className="w-5 h-5 animate-pulse" />
+            </div>
+            <div className="min-w-0">
+              <div className="text-sm font-bold text-white truncate">Unsaved Changes Detected</div>
+              <div className="text-xs text-slate-400 truncate">Confirm and apply your updated cinema details</div>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2 shrink-0">
+            <button
+              type="button"
+              onClick={handleDiscardChanges}
+              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition"
+            >
+              Discard
+            </button>
+            <button
+              type="button"
+              onClick={handleSaveBranding}
+              className="flex items-center space-x-1.5 px-5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-black shadow-lg shadow-teal-500/30 transition active:scale-95"
+            >
+              <Save className="w-4 h-4" />
+              <span>Save Changes Now</span>
+            </button>
+          </div>
         </div>
       )}
     </div>

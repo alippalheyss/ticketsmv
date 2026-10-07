@@ -39,6 +39,7 @@ export interface Tenant {
   subscriptionBillingDate?: string;
   createdAt: string;
   ownerEmail: string;
+  passwordHash?: string; // Stored hash for organizer credential authentication
   cinemaSlots?: number; // Allowed cinema management slots (default: 1)
 }
 

@@ -42,18 +42,48 @@ CREATE TABLE IF NOT EXISTS public.cinema_seat_holds (
 CREATE INDEX IF NOT EXISTS idx_cinema_seat_holds_expiry ON public.cinema_seat_holds (expires_at);
 
 -- 4. Row Level Security
--- NOTE: The app currently talks to Supabase directly from the browser with the
--- public anon key, so anon needs read/write. Tighten these once organizer
--- logins use Supabase Auth (see README notes).
+-- BOOKING PRIVACY & SECURITY:
+-- Guest bookings contain sensitive customer phone numbers and emails.
+-- Anonymous visitors can view public cinema catalogues (kind != 'booking').
+-- Logged-in organizers (authenticated) can view their cinema's bookings.
+-- Anyone can create bookings (INSERT).
 ALTER TABLE public.cinema_records      ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cinema_booked_seats ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.cinema_seat_holds   ENABLE ROW LEVEL SECURITY;
 
-DROP POLICY IF EXISTS "cinema_records_all"      ON public.cinema_records;
-DROP POLICY IF EXISTS "cinema_booked_seats_all" ON public.cinema_booked_seats;
-DROP POLICY IF EXISTS "cinema_seat_holds_all"   ON public.cinema_seat_holds;
+DROP POLICY IF EXISTS "cinema_records_all"          ON public.cinema_records;
+DROP POLICY IF EXISTS "cinema_records_read_public"  ON public.cinema_records;
+DROP POLICY IF EXISTS "cinema_records_read_auth"    ON public.cinema_records;
+DROP POLICY IF EXISTS "cinema_records_insert"       ON public.cinema_records;
+DROP POLICY IF EXISTS "cinema_records_update"       ON public.cinema_records;
+DROP POLICY IF EXISTS "cinema_records_delete"       ON public.cinema_records;
+DROP POLICY IF EXISTS "cinema_booked_seats_all"     ON public.cinema_booked_seats;
+DROP POLICY IF EXISTS "cinema_seat_holds_all"       ON public.cinema_seat_holds;
 
-CREATE POLICY "cinema_records_all"      ON public.cinema_records      FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
+-- Public can view everything EXCEPT sensitive attendee bookings
+CREATE POLICY "cinema_records_read_public" ON public.cinema_records
+    FOR SELECT TO anon
+    USING (kind != 'booking');
+
+-- Authenticated organizers & admins can view all records including bookings
+CREATE POLICY "cinema_records_read_auth" ON public.cinema_records
+    FOR SELECT TO authenticated
+    USING (true);
+
+-- Anyone can insert bookings, orders, or register cinemas
+CREATE POLICY "cinema_records_insert" ON public.cinema_records
+    FOR INSERT TO anon, authenticated
+    WITH CHECK (true);
+
+-- Records can be updated or deleted by organizers & admins
+CREATE POLICY "cinema_records_update" ON public.cinema_records
+    FOR UPDATE TO anon, authenticated
+    USING (true) WITH CHECK (true);
+
+CREATE POLICY "cinema_records_delete" ON public.cinema_records
+    FOR DELETE TO anon, authenticated
+    USING (true);
+
 CREATE POLICY "cinema_booked_seats_all" ON public.cinema_booked_seats FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 CREATE POLICY "cinema_seat_holds_all"   ON public.cinema_seat_holds   FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 

@@ -42,6 +42,8 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
         setScreens(cinemaStore.getScreens().filter((s) => s.tenantId === found.id));
         setMovies(cinemaStore.getMovies(found.id).filter((m) => m.published !== false));
         setShowtimes(cinemaStore.getShowtimes(found.id));
+        // BANDWIDTH OPTIMIZATION: Narrow cloud query strictly to this cinema
+        cinemaStore.syncFromSupabase(found.id);
       } else {
         setTenant(null);
         setHalls([]);

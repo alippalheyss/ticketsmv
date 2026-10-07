@@ -25,7 +25,7 @@ export const CheckoutPage: React.FC = () => {
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
   const [guestPhone, setGuestPhone] = useState('+960 ');
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('bml_gateway');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('bml_transfer');
   const [slipFile, setSlipFile] = useState<string | null>(null);
   const [slipPreview, setSlipPreview] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -282,6 +282,7 @@ export const CheckoutPage: React.FC = () => {
             </div>
 
             {/* Payment Method Selector */}
+            {/* Payment Method Selector */}
             <div className="glass-panel rounded-2xl p-6 border border-slate-800 space-y-4">
               <h2 className="text-sm font-bold uppercase tracking-wider text-slate-300 flex items-center space-x-2">
                 <CreditCard className="w-4 h-4 text-teal-400" />
@@ -289,164 +290,88 @@ export const CheckoutPage: React.FC = () => {
               </h2>
 
               <div className="space-y-3">
-                {/* Option 1: BML Payment Gateway */}
-                <label
-                  className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition ${
-                    paymentMethod === 'bml_gateway'
-                      ? 'bg-teal-950/40 border-teal-500 ring-2 ring-teal-500/20'
-                      : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center space-x-3">
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="bml_gateway"
-                      checked={paymentMethod === 'bml_gateway'}
-                      onChange={() => setPaymentMethod('bml_gateway')}
-                      className="text-teal-500 focus:ring-teal-500"
-                    />
-                    <div>
-                      <span className="text-xs font-bold text-white block">
-                        Bank of Maldives (BML Gateway)
-                      </span>
-                      <span className="text-[11px] text-slate-400">
-                        Instant debit/credit card or BML App checkout
-                      </span>
-                    </div>
-                  </div>
-                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-rose-500/20 text-rose-300 border border-rose-500/30">
-                    BML
-                  </span>
-                </label>
-
-                {/* Option 2: Manual Bank Transfer Slip Upload */}
-                <label
-                  className={`flex flex-col p-4 rounded-xl border cursor-pointer transition ${
-                    paymentMethod === 'bml_transfer'
-                      ? 'bg-teal-950/40 border-teal-500 ring-2 ring-teal-500/20'
-                      : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
+                {/* Dedicated Option: Manual Bank Transfer Slip Upload (BML / MIB) */}
+                <div className="p-4 rounded-xl border bg-teal-950/30 border-teal-500/60 ring-2 ring-teal-500/20 space-y-4">
                   <div className="flex items-center justify-between">
                     <div className="flex items-center space-x-3">
-                      <input
-                        type="radio"
-                        name="paymentMethod"
-                        value="bml_transfer"
-                        checked={paymentMethod === 'bml_transfer'}
-                        onChange={() => setPaymentMethod('bml_transfer')}
-                        className="text-teal-500 focus:ring-teal-500"
-                      />
+                      <div className="w-4 h-4 rounded-full bg-teal-500 flex items-center justify-center">
+                        <div className="w-1.5 h-1.5 rounded-full bg-slate-950" />
+                      </div>
                       <div>
                         <span className="text-xs font-bold text-white block">
-                          Manual Bank Transfer Slip Upload (BML / MIB)
+                          Bank Transfer (BML / MIB) &amp; Slip Upload
                         </span>
                         <span className="text-[11px] text-slate-400">
-                          Transfer directly to cinema account & upload receipt
+                          Transfer directly to the cinema's account and upload the transaction receipt
                         </span>
                       </div>
                     </div>
-                    <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30">
-                      Transfer Slip
+                    <span className="text-[10px] uppercase font-bold px-2.5 py-1 rounded bg-teal-500/20 text-teal-300 border border-teal-500/40">
+                      Bank Transfer
                     </span>
                   </div>
 
-                  {/* Transfer Details & Upload Form */}
-                  {paymentMethod === 'bml_transfer' && (
-                    <div className="mt-4 pt-4 border-t border-slate-800 space-y-3">
-                      <div className="p-3.5 rounded-xl bg-slate-950 text-xs space-y-2 text-slate-300 font-mono border border-slate-800">
-                        <div className="text-amber-400 font-bold flex items-center justify-between">
-                          <span>Transfer Directly to Cinema Account:</span>
-                          <span className="text-[10px] text-teal-400">Direct Deposit</span>
-                        </div>
-                        <div>Bank: <strong className="text-white">{tenant?.branding.bankDetails?.bankName || 'Bank of Maldives (BML)'}</strong></div>
-                        <div className="flex items-center justify-between bg-slate-900 px-2.5 py-1.5 rounded-lg border border-slate-700">
-                          <div>
-                            Account: <strong className="text-teal-300 text-sm tracking-wide">{tenant?.branding.bankDetails?.accountNumber || '7701 1928 4401 001'}</strong>
-                          </div>
-                          <button
-                            type="button"
-                            onClick={(e) => {
-                              e.preventDefault();
-                              navigator.clipboard.writeText(tenant?.branding.bankDetails?.accountNumber || '7701 1928 4401 001');
-                              alert('Account number copied to clipboard!');
-                            }}
-                            className="text-[10px] bg-teal-500/20 text-teal-300 hover:bg-teal-500/30 px-2 py-1 rounded font-bold uppercase transition"
-                          >
-                            Copy
-                          </button>
-                        </div>
-                        <div>Account Name: <strong className="text-white">{tenant?.branding.bankDetails?.accountName || tenant?.name}</strong></div>
-                        <div className="text-teal-400 font-bold">Total Amount Due: {formatCurrency(totalPrice)}</div>
-                        {tenant?.branding.bankDetails?.instructions && (
-                          <div className="text-[11px] text-slate-400 italic pt-1 border-t border-slate-800">
-                            Note: {tenant.branding.bankDetails.instructions}
-                          </div>
-                        )}
-                        {tenant?.branding.bankDetails?.qrImageUrl && (
-                          <div className="pt-2 text-center">
-                            <span className="text-[10px] text-slate-400 block mb-1">Scan Cinema BML QR to Pay:</span>
-                            <img src={tenant.branding.bankDetails.qrImageUrl} alt="Cinema Bank QR" className="w-32 h-32 object-contain mx-auto bg-white p-1 rounded-lg" />
-                          </div>
-                        )}
-                      </div>
-
+                  {/* Transfer Details & Account Card */}
+                  <div className="p-3.5 rounded-xl bg-slate-950 text-xs space-y-2.5 text-slate-300 font-mono border border-slate-800">
+                    <div className="text-amber-400 font-bold flex items-center justify-between">
+                      <span>Cinema Account Details:</span>
+                      <span className="text-[10px] text-teal-400 font-sans font-bold px-2 py-0.5 rounded bg-teal-500/10">BML / MIB Transfer</span>
+                    </div>
+                    <div>Bank: <strong className="text-white">{tenant?.branding.bankDetails?.bankName || 'Bank of Maldives (BML)'}</strong></div>
+                    <div className="flex items-center justify-between bg-slate-900 px-3 py-2 rounded-lg border border-slate-700">
                       <div>
-                        <label className="block text-xs font-semibold text-slate-300 mb-1.5">
-                          {t('checkout.uploadSlip')} *
-                        </label>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={handleFileUpload}
-                          className="block w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-teal-500/20 file:text-teal-300 hover:file:bg-teal-500/30"
-                        />
+                        Account: <strong className="text-teal-300 text-sm tracking-wide">{tenant?.branding.bankDetails?.accountNumber || '7701 1928 4401 001'}</strong>
                       </div>
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          navigator.clipboard.writeText(tenant?.branding.bankDetails?.accountNumber || '7701 1928 4401 001');
+                          alert('Cinema account number copied to clipboard!');
+                        }}
+                        className="text-[10px] bg-teal-500/20 text-teal-300 hover:bg-teal-500/30 px-2.5 py-1 rounded font-bold uppercase transition"
+                      >
+                        Copy Account
+                      </button>
+                    </div>
+                    <div>Account Name: <strong className="text-white">{tenant?.branding.bankDetails?.accountName || tenant?.name}</strong></div>
+                    <div className="text-teal-400 font-bold text-sm">Total Payable: {formatCurrency(totalPrice)}</div>
+                    {tenant?.branding.bankDetails?.instructions && (
+                      <div className="text-[11px] text-slate-400 italic pt-1 border-t border-slate-800 font-sans">
+                        Note: {tenant.branding.bankDetails.instructions}
+                      </div>
+                    )}
+                    {tenant?.branding.bankDetails?.qrImageUrl && (
+                      <div className="pt-2 text-center">
+                        <span className="text-[10px] text-slate-400 block mb-1 font-sans">Scan Cinema QR in BML/MIB App to Pay:</span>
+                        <img src={tenant.branding.bankDetails.qrImageUrl} alt="Cinema Bank QR" className="w-32 h-32 object-contain mx-auto bg-white p-1 rounded-lg" />
+                      </div>
+                    )}
+                  </div>
 
-                      {slipPreview && (
-                        <div className="mt-2 relative rounded-lg overflow-hidden border border-slate-700 max-h-40">
-                          <img src={slipPreview} alt="Receipt preview" className="w-full h-auto object-cover" />
-                        </div>
-                      )}
+                  <div>
+                    <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+                      {t('checkout.uploadSlip')} <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      required
+                      onChange={handleFileUpload}
+                      className="block w-full text-xs text-slate-400 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-teal-500/20 file:text-teal-300 hover:file:bg-teal-500/30 cursor-pointer"
+                    />
+                  </div>
 
-                      <p className="text-[11px] text-amber-300/90 leading-tight">
-                        {t('checkout.holdingWarning')}
-                      </p>
+                  {slipPreview && (
+                    <div className="mt-2 relative rounded-lg overflow-hidden border border-slate-700 max-h-48">
+                      <img src={slipPreview} alt="Receipt preview" className="w-full h-auto object-cover" />
                     </div>
                   )}
-                </label>
 
-                {/* Option 3: Dhiraagu Pay / M-Faisaa */}
-                <label
-                  className={`flex items-center justify-between p-4 rounded-xl border cursor-pointer transition ${
-                    paymentMethod === 'mfaisaa'
-                      ? 'bg-teal-950/40 border-teal-500 ring-2 ring-teal-500/20'
-                      : 'bg-slate-900/80 border-slate-800 hover:border-slate-700'
-                  }`}
-                >
-                  <div className="flex items-center space-x-3">
-                    <input
-                      type="radio"
-                      name="paymentMethod"
-                      value="mfaisaa"
-                      checked={paymentMethod === 'mfaisaa'}
-                      onChange={() => setPaymentMethod('mfaisaa')}
-                      className="text-teal-500 focus:ring-teal-500"
-                    />
-                    <div>
-                      <span className="text-xs font-bold text-white block">
-                        Dhiraagu Pay / Ooredoo m-Faisaa
-                      </span>
-                      <span className="text-[11px] text-slate-400">
-                        Scan QR with your Maldivian mobile wallet
-                      </span>
-                    </div>
-                  </div>
-                  <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                    Mobile Wallet
-                  </span>
-                </label>
+                  <p className="text-[11px] text-amber-300/90 leading-tight">
+                    {t('checkout.holdingWarning')}
+                  </p>
+                </div>
               </div>
             </div>
 

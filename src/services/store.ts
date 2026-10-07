@@ -128,6 +128,7 @@ class MaldivianCinemaStore {
   private channel: BroadcastChannel | null = null;
   private listeners: Set<() => void> = new Set();
   private supabaseSyncing: Promise<void> | null = null;
+  private lastFullSync = 0;
   private readyPromise: Promise<void>;
   private ready = false;
   private applyingRemote = false;
@@ -148,14 +149,15 @@ class MaldivianCinemaStore {
     if (this.cloud && typeof window !== 'undefined') {
       this.readyPromise = this.syncFromSupabase();
       this.startRealtime();
-      // Safety net: re-pull when the tab regains focus or every 60s
-      window.addEventListener('focus', () => { this.syncFromSupabase(); });
-      document.addEventListener('visibilitychange', () => {
-        if (document.visibilityState === 'visible') this.syncFromSupabase();
+      // Bandwidth optimization: Throttle tab focus/visibility re-pull to avoid egress spikes
+      window.addEventListener('focus', () => {
+        if (Date.now() - this.lastFullSync > 60000) this.syncFromSupabase();
       });
-      setInterval(() => {
-        if (document.visibilityState === 'visible') this.syncFromSupabase();
-      }, 60000);
+      document.addEventListener('visibilitychange', () => {
+        if (document.visibilityState === 'visible' && Date.now() - this.lastFullSync > 60000) {
+          this.syncFromSupabase();
+        }
+      });
     } else {
       this.ready = true;
       this.readyPromise = Promise.resolve();
@@ -255,47 +257,59 @@ class MaldivianCinemaStore {
     }
   }
 
-  /** Downloads the full shared catalogue from Supabase and replaces the local cache. */
-  public syncFromSupabase(): Promise<void> {
+  /**
+   * Downloads public catalogue records from Supabase.
+   * BANDWIDTH & PRIVACY OPTIMIZATIONS:
+   * 1. Bookings are NEVER downloaded in public sync to protect customer privacy.
+   * 2. When scoped to a tenant (e.g. portal or subdomain), only that tenant's records are fetched.
+   */
+  public syncFromSupabase(targetTenantId?: string): Promise<void> {
     if (!this.cloud) return Promise.resolve();
     if (this.supabaseSyncing) return this.supabaseSyncing;
 
     this.supabaseSyncing = (async () => {
       try {
-        const rows: any[] = [];
-        const pageSize = 1000;
-        for (let from = 0; ; from += pageSize) {
-          const { data, error } = await supabase
-            .from(RECORDS_TABLE)
-            .select('kind,id,data')
-            .range(from, from + pageSize - 1);
-          if (error) throw error;
-          rows.push(...(data || []));
-          if (!data || data.length < pageSize) break;
+        let query = supabase
+          .from(RECORDS_TABLE)
+          .select('kind,id,tenant_id,data')
+          .neq('kind', 'booking') // PRIVACY: Never expose guest bookings in public sync
+          .limit(1000);
+
+        if (targetTenantId) {
+          query = query.or(`kind.eq.tenant,tenant_id.eq.${targetTenantId},id.eq.${targetTenantId}`);
         }
+
+        const { data: rows, error } = await query;
+        if (error) throw error;
 
         const grouped: Record<RecordKind, any[]> = {
           tenant: [], hall: [], screen: [], movie: [], showtime: [], booking: [], tenant_request: [],
         };
-        rows.forEach((r) => {
+        (rows || []).forEach((r) => {
           if (grouped[r.kind as RecordKind]) grouped[r.kind as RecordKind].push(r.data);
         });
 
         this.applyingRemote = true;
         try {
           (Object.keys(grouped) as RecordKind[]).forEach((kind) => {
+            if (kind === 'booking') return; // Do not overwrite local bookings with empty public list
             const list = grouped[kind];
-            if (kind === 'booking' || kind === 'tenant_request') {
-              list.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
+            if (targetTenantId && kind !== 'tenant') {
+              // Merge tenant scoped items with existing cache
+              const key = KEY_BY_KIND[kind];
+              let existing: any[] = [];
+              try { existing = JSON.parse(localStorage.getItem(key) || '[]'); } catch { existing = []; }
+              const other = existing.filter((x) => x.tenantId !== targetTenantId);
+              localStorage.setItem(key, JSON.stringify([...other, ...list]));
+            } else {
+              localStorage.setItem(KEY_BY_KIND[kind], JSON.stringify(list));
             }
-            // Authoritative overwrite: empty cloud list => empty local list (deletions propagate)
-            localStorage.setItem(KEY_BY_KIND[kind], JSON.stringify(list));
           });
         } finally {
           this.applyingRemote = false;
         }
 
-        // Shared seat holds (10-minute locks) so customers on other phones see held seats
+        // Shared seat holds (10-minute locks)
         const { data: holds } = await supabase
           .from(SEAT_HOLDS_TABLE)
           .select('showtime_id,seat_id,session_id,expires_at')
@@ -313,11 +327,73 @@ class MaldivianCinemaStore {
         console.warn('[cloud] sync failed, showing last cached data:', e?.message || e);
       } finally {
         this.ready = true;
+        this.lastFullSync = Date.now();
         this.supabaseSyncing = null;
         this.notifyListeners();
       }
     })();
     return this.supabaseSyncing;
+  }
+
+  /**
+   * SECURE TENANT BOOKINGS SYNC:
+   * Called strictly by logged-in organizers from TenantAdminPage to retrieve
+   * only the attendee bookings belonging to their specific cinema.
+   */
+  public async syncBookingsForTenant(tenantId: string): Promise<Booking[]> {
+    if (!tenantId) return [];
+    if (this.cloud) {
+      try {
+        const { data: rows, error } = await supabase
+          .from(RECORDS_TABLE)
+          .select('data')
+          .eq('kind', 'booking')
+          .eq('tenant_id', tenantId)
+          .order('updated_at', { ascending: false });
+
+        if (!error && rows) {
+          const bookings = rows.map((r) => r.data as Booking);
+          let allBookings = this.getBookings();
+          // Replace bookings for this tenant with fresh cloud records
+          allBookings = allBookings.filter((b) => b.tenantId !== tenantId);
+          allBookings.unshift(...bookings);
+          localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(allBookings));
+          this.broadcastSync();
+          return bookings;
+        }
+      } catch (e) {
+        console.warn('[cloud] syncBookingsForTenant error:', e);
+      }
+    }
+    return this.getBookings(tenantId);
+  }
+
+  /**
+   * Single ticket pass lookup for a guest opening /ticket/:bookingRef.
+   */
+  public async fetchBookingByRef(bookingRef: string): Promise<Booking | undefined> {
+    const cleanRef = bookingRef.trim().toUpperCase();
+    const existing = this.getBookingByRef(cleanRef);
+    if (existing) return existing;
+    if (this.cloud) {
+      try {
+        const { data, error } = await supabase
+          .from(RECORDS_TABLE)
+          .select('data')
+          .eq('kind', 'booking')
+          .limit(50);
+        if (!error && data) {
+          const match = data.find((r: any) => r.data?.bookingRef?.toUpperCase() === cleanRef);
+          if (match?.data) {
+            const list = this.getBookings();
+            list.unshift(match.data);
+            localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(list));
+            return match.data;
+          }
+        }
+      } catch {}
+    }
+    return undefined;
   }
 
   /** Subscribes to live database changes so every open device updates instantly. */
