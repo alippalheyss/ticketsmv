@@ -1501,8 +1501,29 @@ export const TenantAdminPage: React.FC = () => {
                       )}
                     </div>
 
-                    <div className="text-[11px] text-slate-400">
-                      Public sublink: <Link to={`/t/${brandingForm.slug}`} target="_blank" className="font-mono text-teal-400 hover:underline">cinemamv.online/t/{brandingForm.slug} ↗</Link>
+                    <div className="p-3 rounded-xl bg-slate-950/80 border border-slate-800 space-y-2 text-xs">
+                      <div className="font-bold text-slate-200">Your Cinema Live Links:</div>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px]">
+                        <span className="text-slate-400">1. Custom Subdomain:</span>
+                        <a
+                          href={`https://${brandingForm.slug}.cinemamv.online`}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="font-mono text-teal-400 hover:underline font-bold"
+                        >
+                          https://{brandingForm.slug}.cinemamv.online ↗
+                        </a>
+                      </div>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 text-[11px]">
+                        <span className="text-slate-400">2. Universal Direct Link:</span>
+                        <Link
+                          to={`/t/${brandingForm.slug}`}
+                          target="_blank"
+                          className="font-mono text-cyan-400 hover:underline font-bold"
+                        >
+                          cinemamv.online/t/{brandingForm.slug} ↗
+                        </Link>
+                      </div>
                     </div>
                   </div>
                 )}

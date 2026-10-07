@@ -454,6 +454,63 @@ const INITIAL_LOGS: SystemLog[] = [
   }
 ];
 
+// Helper to set cookie shared across apex domain and all subdomains (*.cinemamv.online)
+function setCrossDomainCookie(name: string, value: string) {
+  if (typeof document === 'undefined') return;
+  try {
+    const host = window.location.hostname;
+    let domainAttr = '';
+    if (host.includes('cinemamv.online')) {
+      domainAttr = '; domain=.cinemamv.online';
+    } else if (host.includes('.') && !host.endsWith('.localhost') && !/^\d+\.\d+\.\d+\.\d+$/.test(host)) {
+      const parts = host.split('.');
+      if (parts.length >= 2) {
+        domainAttr = `; domain=.${parts.slice(-2).join('.')}`;
+      }
+    }
+    const encoded = encodeURIComponent(value);
+    document.cookie = `${name}=${encoded}; path=/; max-age=31536000; SameSite=Lax${domainAttr}`;
+  } catch (e) {
+    console.warn('Failed to set cross-domain cookie:', e);
+  }
+}
+
+function getCrossDomainCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null;
+  try {
+    const prefix = `${name}=`;
+    const parts = document.cookie.split(';');
+    for (let part of parts) {
+      part = part.trim();
+      if (part.startsWith(prefix)) {
+        return decodeURIComponent(part.substring(prefix.length));
+      }
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function sanitizeTenantsForCookie(tenants: Tenant[]): any[] {
+  return tenants.map(t => ({
+    id: t.id,
+    name: t.name,
+    slug: t.slug,
+    tenantCode: t.tenantCode,
+    tier: t.tier,
+    status: t.status,
+    subscriptionModel: t.subscriptionModel,
+    subscriptionPriceMvr: t.subscriptionPriceMvr,
+    ownerEmail: t.ownerEmail,
+    branding: {
+      ...t.branding,
+      logoUrl: t.branding.logoUrl?.startsWith('data:') ? '' : t.branding.logoUrl,
+      bannerUrl: t.branding.bannerUrl?.startsWith('data:') ? '' : t.branding.bannerUrl,
+    }
+  }));
+}
+
 // In-Memory & LocalStorage Sync Store
 class MaldivianCinemaStore {
   private channel: BroadcastChannel | null = null;
@@ -476,7 +533,13 @@ class MaldivianCinemaStore {
 
   private getDeletedTombstones(): { movies: string[]; showtimes: string[] } {
     try {
-      const data = localStorage.getItem('mv_cinemamv_tombstones_v1');
+      let data = localStorage.getItem('mv_cinemamv_tombstones_v1');
+      if (!data) {
+        data = getCrossDomainCookie('mv_cinemamv_tombstones_v1');
+        if (data) {
+          localStorage.setItem('mv_cinemamv_tombstones_v1', data);
+        }
+      }
       return data ? JSON.parse(data) : { movies: [], showtimes: [] };
     } catch {
       return { movies: [], showtimes: [] };
@@ -491,7 +554,9 @@ class MaldivianCinemaStore {
       } else if (type === 'showtime' && !ts.showtimes.includes(id)) {
         ts.showtimes.push(id);
       }
-      localStorage.setItem('mv_cinemamv_tombstones_v1', JSON.stringify(ts));
+      const serialized = JSON.stringify(ts);
+      localStorage.setItem('mv_cinemamv_tombstones_v1', serialized);
+      setCrossDomainCookie('mv_cinemamv_tombstones_v1', serialized);
     } catch {}
   }
 
@@ -499,14 +564,47 @@ class MaldivianCinemaStore {
     if (typeof window === 'undefined') return;
     const tombstones = this.getDeletedTombstones();
 
+    let initialTenants = INITIAL_TENANTS;
+    const cookieTenants = getCrossDomainCookie('mv_cinemamv_tenants_v1');
+    if (cookieTenants) {
+      try {
+        const parsed: Tenant[] = JSON.parse(cookieTenants);
+        if (Array.isArray(parsed) && parsed.length > 0) {
+          const merged = [...INITIAL_TENANTS];
+          parsed.forEach((pt) => {
+            const idx = merged.findIndex(x => x.id === pt.id || x.slug.toLowerCase() === pt.slug.toLowerCase());
+            if (idx >= 0) merged[idx] = pt;
+            else merged.push(pt);
+          });
+          initialTenants = merged;
+        }
+      } catch {}
+    }
+
     if (!localStorage.getItem(STORAGE_KEYS.TENANTS)) {
-      localStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(INITIAL_TENANTS));
+      localStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(initialTenants));
     }
     if (!localStorage.getItem(STORAGE_KEYS.HALLS)) {
-      localStorage.setItem(STORAGE_KEYS.HALLS, JSON.stringify(INITIAL_HALLS));
+      let hallsToSave = INITIAL_HALLS;
+      const cookieHalls = getCrossDomainCookie('mv_cinemamv_halls_v1');
+      if (cookieHalls) {
+        try {
+          const parsed = JSON.parse(cookieHalls);
+          if (Array.isArray(parsed) && parsed.length > 0) hallsToSave = parsed;
+        } catch {}
+      }
+      localStorage.setItem(STORAGE_KEYS.HALLS, JSON.stringify(hallsToSave));
     }
     if (!localStorage.getItem(STORAGE_KEYS.SCREENS)) {
-      localStorage.setItem(STORAGE_KEYS.SCREENS, JSON.stringify(INITIAL_SCREENS));
+      let screensToSave = INITIAL_SCREENS;
+      const cookieScreens = getCrossDomainCookie('mv_cinemamv_screens_v1');
+      if (cookieScreens) {
+        try {
+          const parsed = JSON.parse(cookieScreens);
+          if (Array.isArray(parsed) && parsed.length > 0) screensToSave = parsed;
+        } catch {}
+      }
+      localStorage.setItem(STORAGE_KEYS.SCREENS, JSON.stringify(screensToSave));
     }
     if (!localStorage.getItem(STORAGE_KEYS.MOVIES)) {
       const filteredMovies = INITIAL_MOVIES.filter(m => !tombstones.movies.includes(m.id));
@@ -670,29 +768,53 @@ class MaldivianCinemaStore {
   public getTenants(): Tenant[] {
     try {
       this.checkAndExpireSubscriptions();
-      const data = localStorage.getItem(STORAGE_KEYS.TENANTS);
-      if (data) {
-        const list: Tenant[] = JSON.parse(data);
-        let updated = false;
-        list.forEach((t) => {
-          if (t.subscriptionModel === 'monthly' && t.subscriptionPriceMvr !== 249) {
-            t.subscriptionPriceMvr = 249;
-            updated = true;
-          }
-          if (t.subscriptionModel === 'one_month' || t.subscriptionModel === 'yearly') {
-            t.subscriptionModel = 'yearly';
-            if (t.subscriptionPriceMvr !== 499) {
-              t.subscriptionPriceMvr = 499;
-              updated = true;
+      let data = localStorage.getItem(STORAGE_KEYS.TENANTS);
+      let list: Tenant[] = data ? JSON.parse(data) : INITIAL_TENANTS;
+
+      // Always merge cross-domain cookie tenants for seamless subdomains
+      const cookieData = getCrossDomainCookie('mv_cinemamv_tenants_v1');
+      if (cookieData) {
+        try {
+          const cookieList: Tenant[] = JSON.parse(cookieData);
+          if (Array.isArray(cookieList)) {
+            let changed = false;
+            cookieList.forEach((ct) => {
+              const idx = list.findIndex((x) => x.id === ct.id || x.slug.toLowerCase() === ct.slug.toLowerCase());
+              if (idx >= 0) {
+                if (list[idx].slug !== ct.slug || list[idx].name !== ct.name || JSON.stringify(list[idx].branding) !== JSON.stringify(ct.branding)) {
+                  list[idx] = { ...list[idx], ...ct };
+                  changed = true;
+                }
+              } else {
+                list.push(ct);
+                changed = true;
+              }
+            });
+            if (changed) {
+              localStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(list));
             }
           }
-        });
-        if (updated) {
-          localStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(list));
-        }
-        return list;
+        } catch {}
       }
-      return INITIAL_TENANTS;
+
+      let updated = false;
+      list.forEach((t) => {
+        if (t.subscriptionModel === 'monthly' && t.subscriptionPriceMvr !== 249) {
+          t.subscriptionPriceMvr = 249;
+          updated = true;
+        }
+        if (t.subscriptionModel === 'one_month' || t.subscriptionModel === 'yearly') {
+          t.subscriptionModel = 'yearly';
+          if (t.subscriptionPriceMvr !== 499) {
+            t.subscriptionPriceMvr = 499;
+            updated = true;
+          }
+        }
+      });
+      if (updated) {
+        localStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(list));
+      }
+      return list;
     } catch {
       return INITIAL_TENANTS;
     }
@@ -722,7 +844,9 @@ class MaldivianCinemaStore {
     } else {
       list.push(tenant);
     }
-    localStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(list));
+    const serialized = JSON.stringify(list);
+    localStorage.setItem(STORAGE_KEYS.TENANTS, serialized);
+    setCrossDomainCookie('mv_cinemamv_tenants_v1', JSON.stringify(sanitizeTenantsForCookie(list)));
 
     if (isSupabaseConfigured()) {
       supabase.from('tenants').upsert({
@@ -969,8 +1093,24 @@ class MaldivianCinemaStore {
   // --- HALLS ---
   public getHalls(tenantId?: string): Hall[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.HALLS);
-      const list: Hall[] = data ? JSON.parse(data) : INITIAL_HALLS;
+      let data = localStorage.getItem(STORAGE_KEYS.HALLS);
+      if (!data) {
+        const cookieHalls = getCrossDomainCookie('mv_cinemamv_halls_v1');
+        if (cookieHalls) {
+          data = cookieHalls;
+          localStorage.setItem(STORAGE_KEYS.HALLS, cookieHalls);
+        }
+      }
+      let list: Hall[] = data ? JSON.parse(data) : INITIAL_HALLS;
+      const cookieHalls = getCrossDomainCookie('mv_cinemamv_halls_v1');
+      if (cookieHalls) {
+        try {
+          const cList: Hall[] = JSON.parse(cookieHalls);
+          cList.forEach((ch) => {
+            if (!list.some(x => x.id === ch.id)) list.push(ch);
+          });
+        } catch {}
+      }
       return tenantId ? list.filter((h) => h.tenantId === tenantId) : list;
     } catch {
       return INITIAL_HALLS;
@@ -989,15 +1129,33 @@ class MaldivianCinemaStore {
     } else {
       list.push(hall);
     }
-    localStorage.setItem(STORAGE_KEYS.HALLS, JSON.stringify(list));
+    const serialized = JSON.stringify(list);
+    localStorage.setItem(STORAGE_KEYS.HALLS, serialized);
+    setCrossDomainCookie('mv_cinemamv_halls_v1', serialized);
     this.broadcastSync();
   }
 
   // --- SCREENS (MULTIPLE SCREENS PER HALL) ---
   public getScreens(hallId?: string): Screen[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.SCREENS);
-      const list: Screen[] = data ? JSON.parse(data) : INITIAL_SCREENS;
+      let data = localStorage.getItem(STORAGE_KEYS.SCREENS);
+      if (!data) {
+        const cookieScreens = getCrossDomainCookie('mv_cinemamv_screens_v1');
+        if (cookieScreens) {
+          data = cookieScreens;
+          localStorage.setItem(STORAGE_KEYS.SCREENS, cookieScreens);
+        }
+      }
+      let list: Screen[] = data ? JSON.parse(data) : INITIAL_SCREENS;
+      const cookieScreens = getCrossDomainCookie('mv_cinemamv_screens_v1');
+      if (cookieScreens) {
+        try {
+          const cList: Screen[] = JSON.parse(cookieScreens);
+          cList.forEach((cs) => {
+            if (!list.some(x => x.id === cs.id)) list.push(cs);
+          });
+        } catch {}
+      }
       return hallId ? list.filter((s) => s.hallId === hallId) : list;
     } catch {
       return INITIAL_SCREENS;
@@ -1016,7 +1174,9 @@ class MaldivianCinemaStore {
     } else {
       list.push(screen);
     }
-    localStorage.setItem(STORAGE_KEYS.SCREENS, JSON.stringify(list));
+    const serialized = JSON.stringify(list);
+    localStorage.setItem(STORAGE_KEYS.SCREENS, serialized);
+    setCrossDomainCookie('mv_cinemamv_screens_v1', serialized);
 
     if (isSupabaseConfigured()) {
       supabase.from('screens').upsert({
@@ -1058,9 +1218,14 @@ class MaldivianCinemaStore {
   public getMovies(tenantId?: string): Movie[] {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.MOVIES);
-      const list: Movie[] = data ? JSON.parse(data) : INITIAL_MOVIES;
+      const tombstones = this.getDeletedTombstones();
+      let list: Movie[] = data ? JSON.parse(data) : INITIAL_MOVIES;
+      // Filter out any tombstoned/deleted movies
+      list = list.filter((m) => !tombstones.movies.includes(m.id));
       if (tenantId) {
-        return list.filter((m) => !m.tenantId || m.tenantId === tenantId);
+        const tenantShowtimes = this.getShowtimes(tenantId);
+        const activeMovieIds = new Set(tenantShowtimes.map((st) => st.movieId));
+        return list.filter((m) => m.tenantId === tenantId || activeMovieIds.has(m.id));
       }
       return list;
     } catch {
@@ -1167,8 +1332,26 @@ class MaldivianCinemaStore {
   // --- SHOWTIMES (WITH CANCEL AND DELETE OPTIONS) ---
   public getShowtimes(tenantId?: string): Showtime[] {
     try {
-      const data = localStorage.getItem(STORAGE_KEYS.SHOWTIMES);
-      const list: Showtime[] = data ? JSON.parse(data) : INITIAL_SHOWTIMES;
+      let data = localStorage.getItem(STORAGE_KEYS.SHOWTIMES);
+      const tombstones = this.getDeletedTombstones();
+      if (!data) {
+        const cookieShowtimes = getCrossDomainCookie('mv_cinemamv_showtimes_v1');
+        if (cookieShowtimes) {
+          data = cookieShowtimes;
+          localStorage.setItem(STORAGE_KEYS.SHOWTIMES, cookieShowtimes);
+        }
+      }
+      let list: Showtime[] = data ? JSON.parse(data) : INITIAL_SHOWTIMES;
+      const cookieShowtimes = getCrossDomainCookie('mv_cinemamv_showtimes_v1');
+      if (cookieShowtimes) {
+        try {
+          const cList: Showtime[] = JSON.parse(cookieShowtimes);
+          cList.forEach((cs) => {
+            if (!list.some(x => x.id === cs.id)) list.push(cs);
+          });
+        } catch {}
+      }
+      list = list.filter((st) => !tombstones.showtimes.includes(st.id) && !tombstones.movies.includes(st.movieId));
       return tenantId ? list.filter((s) => s.tenantId === tenantId) : list;
     } catch {
       return INITIAL_SHOWTIMES;
@@ -1187,7 +1370,9 @@ class MaldivianCinemaStore {
     } else {
       list.push(showtime);
     }
-    localStorage.setItem(STORAGE_KEYS.SHOWTIMES, JSON.stringify(list));
+    const serialized = JSON.stringify(list);
+    localStorage.setItem(STORAGE_KEYS.SHOWTIMES, serialized);
+    setCrossDomainCookie('mv_cinemamv_showtimes_v1', serialized);
 
     if (isSupabaseConfigured()) {
       supabase.from('showtimes').upsert({

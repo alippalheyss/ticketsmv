@@ -25,16 +25,30 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    if (!tenantSlug) return;
-    const tFound = cinemaStore.getTenantBySlug(tenantSlug);
-    if (tFound) {
-      setTenant(tFound);
-      setHalls(cinemaStore.getHalls(tFound.id));
-      setScreens(cinemaStore.getScreens().filter((s) => s.tenantId === tFound.id));
-      setMovies(cinemaStore.getMovies().filter((m) => m.published !== false));
-      setShowtimes(cinemaStore.getShowtimes(tFound.id));
+    if (!tenantSlug) {
+      setLoading(false);
+      return;
     }
-    setLoading(false);
+
+    const loadTenant = async () => {
+      let tFound = cinemaStore.getTenantBySlug(tenantSlug);
+      if (!tFound) {
+        // Attempt cloud sync if available
+        await cinemaStore.syncFromSupabase();
+        tFound = cinemaStore.getTenantBySlug(tenantSlug);
+      }
+
+      if (tFound) {
+        setTenant(tFound);
+        setHalls(cinemaStore.getHalls(tFound.id));
+        setScreens(cinemaStore.getScreens().filter((s) => s.tenantId === tFound.id));
+        setMovies(cinemaStore.getMovies(tFound.id).filter((m) => m.published !== false));
+        setShowtimes(cinemaStore.getShowtimes(tFound.id));
+      }
+      setLoading(false);
+    };
+
+    loadTenant();
 
     const unsub = cinemaStore.subscribe(() => {
       if (tenantSlug) {
@@ -43,7 +57,9 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
           setTenant(updated);
           setHalls(cinemaStore.getHalls(updated.id));
           setScreens(cinemaStore.getScreens().filter((s) => s.tenantId === updated.id));
+          setMovies(cinemaStore.getMovies(updated.id).filter((m) => m.published !== false));
           setShowtimes(cinemaStore.getShowtimes(updated.id));
+          setLoading(false);
         }
       }
     });
@@ -59,19 +75,36 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
   }
 
   if (!tenant) {
+    const isSubdomainHost = typeof window !== 'undefined' && 
+      (window.location.hostname.includes('.cinemamv.online') || 
+       (window.location.hostname.endsWith('.localhost') && window.location.hostname !== 'localhost'));
+    const mainDirectoryUrl = isSubdomainHost ? 'https://cinemamv.online' : '/';
+
     return (
-      <div className="max-w-md mx-auto text-center py-20 px-4">
-        <Building2 className="w-16 h-16 text-slate-700 mx-auto mb-4" />
-        <h2 className="text-xl font-bold text-white mb-2">Cinema Portal Not Found</h2>
-        <p className="text-xs text-slate-400 mb-6">
-          The cinema sublink "/t/{tenantSlug}" is not registered on CinemaMV.online.
+      <div className="max-w-md mx-auto text-center py-20 px-4 space-y-4">
+        <div className="w-16 h-16 rounded-2xl bg-slate-900 border border-slate-800 flex items-center justify-center mx-auto text-slate-500 shadow-xl">
+          <Building2 className="w-8 h-8" />
+        </div>
+        <h2 className="text-xl font-bold text-white tracking-tight">Cinema Portal Not Found</h2>
+        <p className="text-xs text-slate-400 leading-relaxed">
+          The cinema subdomain <span className="font-mono text-amber-300 font-bold">"{tenantSlug}.cinemamv.online"</span> is not registered or is still synchronizing.
         </p>
-        <Link
-          to="/"
-          className="px-4 py-2 rounded-xl bg-teal-500 text-slate-950 font-bold text-xs"
-        >
-          Return to All Maldivian Cinemas
-        </Link>
+        <div className="flex flex-col sm:flex-row gap-2.5 justify-center pt-2">
+          {isSubdomainHost && (
+            <a
+              href={`https://cinemamv.online/t/${tenantSlug}`}
+              className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold text-xs border border-teal-500/30 transition"
+            >
+              Try Universal Link (/t/{tenantSlug}) ↗
+            </a>
+          )}
+          <a
+            href={mainDirectoryUrl}
+            className="px-4 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs transition shadow-md shadow-teal-500/20"
+          >
+            Return to CinemaMV.online Directory
+          </a>
+        </div>
       </div>
     );
   }

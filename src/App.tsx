@@ -30,10 +30,8 @@ function RootRouteHandler() {
 
   if (isSubdomain) {
     const slug = parts[0].toLowerCase();
-    const tenant = cinemaStore.getTenantBySlug(slug);
-    if (tenant) {
-      return <TenantPortalPage tenantSlugFromHost={slug} />;
-    }
+    // Subdomain routing must strictly render the cinema portal and never fall back to HomePage
+    return <TenantPortalPage tenantSlugFromHost={slug} />;
   }
 
   return <HomePage />;
