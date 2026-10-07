@@ -1354,6 +1354,25 @@ class MaldivianCinemaStore {
     req.status = 'approved';
     this.persist(STORAGE_KEYS.TENANT_REQUESTS, JSON.stringify(requests));
 
+    // If an existing tenant is upgrading / switching their subscription plan
+    const existingTenant = this.getTenants().find(
+      (t) => (req.tenantCode && t.tenantCode?.toLowerCase() === req.tenantCode.toLowerCase()) ||
+             t.ownerEmail.toLowerCase() === req.contactEmail.toLowerCase()
+    );
+    if (existingTenant) {
+      this.updateTenantSubscription(existingTenant.id, req.subscriptionPlan, req.subscriptionPriceMvr);
+      this.addLog({
+        id: `log-${Date.now()}-approved-upgrade`,
+        type: 'tenant',
+        tenantId: existingTenant.id,
+        message: `Tenant "${existingTenant.name}" (${existingTenant.tenantCode}) plan upgrade to ${req.subscriptionPlan.toUpperCase()} approved by Super Admin`,
+        status: 'success',
+        timestamp: new Date().toISOString()
+      });
+      this.broadcastSync();
+      return existingTenant;
+    }
+
     const slug = req.cinemaName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || `tenant-${Date.now()}`;
     const daysToAdd = req.subscriptionPlan === 'weekly' ? 7 : (req.subscriptionPlan === 'yearly' || req.subscriptionPlan === 'one_month') ? 365 : 30;
     const newTenant: Tenant = {

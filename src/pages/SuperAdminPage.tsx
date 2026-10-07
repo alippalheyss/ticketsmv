@@ -367,6 +367,18 @@ export const SuperAdminPage: React.FC = () => {
                     <p>Payment Choice: <span className="text-cyan-300 font-bold">{req.paymentMethod.replace('_', ' ').toUpperCase()}</span></p>
                     <p>Channel: <span className="text-amber-300 font-semibold">{req.channel.toUpperCase()}</span></p>
                     {req.notes && <p className="italic text-slate-400">"{req.notes}"</p>}
+                    {(req.paymentSlipUrl || (req as any).slipUrl) && (
+                      <div className="pt-2">
+                        <span className="text-[11px] text-slate-400 block mb-1 font-semibold">Bank Transfer Receipt Slip:</span>
+                        <a href={req.paymentSlipUrl || (req as any).slipUrl} target="_blank" rel="noopener noreferrer">
+                          <img
+                            src={req.paymentSlipUrl || (req as any).slipUrl}
+                            alt="Payment Slip"
+                            className="w-full max-h-36 object-contain rounded-xl border border-slate-700 bg-black/40 hover:opacity-90 transition cursor-zoom-in"
+                          />
+                        </a>
+                      </div>
+                    )}
                   </div>
                 </div>
 

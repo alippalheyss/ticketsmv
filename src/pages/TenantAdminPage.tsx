@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Tenant, Hall, Screen, Movie, Showtime, Booking, BankDetails, SubscriptionModel 
+  Tenant, Hall, Screen, Movie, Showtime, Booking, BankDetails, SubscriptionModel, TenantRegistrationRequest 
 } from '../types';
 import { cinemaStore } from '../services/store';
 import { useLanguage } from '../context/LanguageContext';
@@ -9,7 +9,7 @@ import {
   Building2, Film, Calendar, Users, Sliders, ExternalLink, Plus, Edit3, 
   Download, DollarSign, Upload, MapPin, Check, Ban, Trash2, LayoutGrid, 
   CreditCard, Sparkles, AlertCircle, AlertTriangle, Copy, Image, Play, CheckCircle2, X, LogOut, Lock, KeyRound,
-  Globe, RefreshCw, Save
+  Globe, RefreshCw, Save, Send
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -119,6 +119,14 @@ export const TenantAdminPage: React.FC = () => {
   const [isDeletingProfile, setIsDeletingProfile] = useState(false);
   const [planChangeMessage, setPlanChangeMessage] = useState<string | null>(null);
 
+  // Subscription Plan Upgrade Request State (requires Super Admin approval)
+  const [tenantRequests, setTenantRequests] = useState<TenantRegistrationRequest[]>([]);
+  const [showUpgradeModal, setShowUpgradeModal] = useState(false);
+  const [targetUpgradePlan, setTargetUpgradePlan] = useState<'weekly' | 'monthly' | 'yearly'>('monthly');
+  const [upgradeSlipUrl, setUpgradeSlipUrl] = useState('');
+  const [upgradeNotes, setUpgradeNotes] = useState('');
+  const [isSubmittingUpgrade, setIsSubmittingUpgrade] = useState(false);
+
   // Additional Cinema Slots & Chain Expansion Form
   const [showBuySlotModal, setShowBuySlotModal] = useState(false);
   const [newSlotCinemaName, setNewSlotCinemaName] = useState('');
@@ -149,6 +157,7 @@ export const TenantAdminPage: React.FC = () => {
   const refreshData = () => {
     const allT = cinemaStore.getTenants();
     setTenants(allT);
+    setTenantRequests(cinemaStore.getTenantRequests());
 
     const saved = sessionStorage.getItem('mv_tenant_auth');
     let sessionTenant: Tenant | null = null;
@@ -555,24 +564,61 @@ export const TenantAdminPage: React.FC = () => {
     refreshData();
   };
 
-  // Switch Subscription Model (Weekly, Monthly, 1-Year Pass)
-  const handleSwitchSubscription = (model: SubscriptionModel) => {
-    if (!currentTenant) return;
-    let price = 249;
-    if (model === 'weekly') price = 149;
-    if (model === 'monthly') price = 249;
-    if (model === 'yearly' || model === 'one_month') price = 499;
-    if (model === 'free_trial') price = 0;
+  // Subscription Plan Upgrade Request (Requires Super Admin Approval)
+  const handleOpenUpgradeModal = (plan: 'weekly' | 'monthly' | 'yearly') => {
+    setTargetUpgradePlan(plan);
+    setUpgradeSlipUrl('');
+    setUpgradeNotes('');
+    setShowUpgradeModal(true);
+  };
 
-    cinemaStore.updateTenantSubscription(currentTenant.id, model, price);
-    const updated = cinemaStore.getTenantById(currentTenant.id);
-    if (updated) {
-      setCurrentTenant(updated);
-      sessionStorage.setItem('mv_tenant_auth', JSON.stringify(updated));
+  const handleSlipUploadForUpgrade = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setUpgradeSlipUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
     }
-    refreshData();
-    const planName = model === 'free_trial' ? '3-Day Free Trial' : model === 'yearly' || model === 'one_month' ? '1-Year Pass' : `${model.toUpperCase()} Pass`;
-    setPlanChangeMessage(`🎉 Subscription successfully switched to ${planName} (MVR ${price})! All features unlocked with zero commission.`);
+  };
+
+  const handleSubmitSubscriptionRequest = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!currentTenant) return;
+
+    let price = 249;
+    if (targetUpgradePlan === 'weekly') price = 149;
+    if (targetUpgradePlan === 'monthly') price = 249;
+    if (targetUpgradePlan === 'yearly') price = 499;
+
+    setIsSubmittingUpgrade(true);
+    try {
+      cinemaStore.createTenantRequest({
+        tenantCode: currentTenant.tenantCode,
+        cinemaName: currentTenant.name,
+        atoll: currentTenant.branding.atoll,
+        island: currentTenant.branding.island,
+        contactPerson: currentTenant.name,
+        contactPhone: currentTenant.branding.contactPhone,
+        contactEmail: currentTenant.ownerEmail,
+        subscriptionPlan: targetUpgradePlan,
+        subscriptionPriceMvr: price,
+        paymentMethod: 'bml_transfer',
+        paymentSlipUrl: upgradeSlipUrl,
+        channel: 'in_app',
+        notes: upgradeNotes.trim() || `Subscription upgrade request to ${targetUpgradePlan.toUpperCase()} (MVR ${price}) submitted by organizer.`
+      });
+
+      refreshData();
+      setShowUpgradeModal(false);
+      const planName = targetUpgradePlan === 'yearly' ? '1-Year Pass' : `${targetUpgradePlan.toUpperCase()} Pass`;
+      setPlanChangeMessage(`🎉 Subscription upgrade request for ${planName} (MVR ${price}) submitted! Super Admin will review your transfer slip and approve your plan activation shortly.`);
+    } catch {
+      alert('Failed to submit subscription request. Please try again.');
+    } finally {
+      setIsSubmittingUpgrade(false);
+    }
   };
 
   // Purchase Extra Cinema Slot & Expand Chain
@@ -1352,56 +1398,21 @@ export const TenantAdminPage: React.FC = () => {
               </div>
             </div>
 
-            {/* Switch Plan Quick Buttons */}
-            <div>
-              <span className="text-xs font-bold text-slate-300 block mb-2">Switch Subscription Plan:</span>
-              <div className="flex flex-wrap items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleSwitchSubscription('free_trial')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
-                    currentTenant.subscriptionModel === 'free_trial' || currentTenant.tier === 'free'
-                      ? 'bg-amber-500 text-slate-950 border-amber-400 shadow-sm'
-                      : 'bg-slate-900 text-amber-300/80 border-slate-800 hover:bg-slate-800'
-                  }`}
-                  title="Downgrade to Free Tier (Restricts Pro Features)"
-                >
-                  Free Plan (0)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSwitchSubscription('weekly')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
-                    currentTenant.subscriptionModel === 'weekly'
-                      ? 'bg-teal-500 text-slate-950 border-teal-400 shadow-sm'
-                      : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
-                  }`}
-                >
-                  Weekly (MVR 149/wk)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSwitchSubscription('monthly')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
-                    currentTenant.subscriptionModel === 'monthly'
-                      ? 'bg-teal-500 text-slate-950 border-teal-400 shadow-sm'
-                      : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
-                  }`}
-                >
-                  Monthly (MVR 249/mo)
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleSwitchSubscription('yearly')}
-                  className={`px-3 py-1.5 rounded-xl text-xs font-bold transition border ${
-                    currentTenant.subscriptionModel === 'yearly' || currentTenant.subscriptionModel === 'one_month'
-                      ? 'bg-teal-500 text-slate-950 border-teal-400 shadow-sm'
-                      : 'bg-slate-900 text-slate-300 border-slate-800 hover:bg-slate-800'
-                  }`}
-                >
-                  1-Year Pass (MVR 499)
-                </button>
+            {/* Subscription Plan Status & Upgrade Prompt */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-2xl bg-slate-900/80 border border-slate-800">
+              <div>
+                <span className="text-xs font-bold text-white block">Need to upgrade or change your subscription?</span>
+                <span className="text-[11px] text-slate-400 block mt-0.5">
+                  Plan upgrades require BML payment slip verification and Super Admin approval.
+                </span>
               </div>
+              <button
+                type="button"
+                onClick={() => setActiveTab('subscription')}
+                className="px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs transition shadow-md whitespace-nowrap self-start sm:self-auto"
+              >
+                View Plans & Upgrade →
+              </button>
             </div>
 
             {/* Free Plan notice if applicable */}
@@ -1876,9 +1887,43 @@ export const TenantAdminPage: React.FC = () => {
             </div>
           </div>
 
+          {/* Check if there is an active pending upgrade request for this cinema */}
+          {(() => {
+            const pendingReq = tenantRequests.find(
+              (r) => r.status === 'pending' &&
+                     ((r.tenantCode && r.tenantCode.toLowerCase() === currentTenant.tenantCode?.toLowerCase()) ||
+                      r.contactEmail.toLowerCase() === currentTenant.ownerEmail.toLowerCase())
+            );
+
+            if (!pendingReq) return null;
+
+            return (
+              <div className="p-4 rounded-2xl bg-amber-500/15 border border-amber-500/40 text-amber-200 flex items-start space-x-3 shadow-lg animate-in fade-in">
+                <AlertCircle className="w-5 h-5 text-amber-400 shrink-0 mt-0.5" />
+                <div className="space-y-1">
+                  <h4 className="font-bold text-sm text-white">
+                    Subscription Request Pending Super Admin Approval
+                  </h4>
+                  <p className="text-xs text-amber-300/90 leading-relaxed">
+                    You have requested the <strong>{pendingReq.subscriptionPlan === 'yearly' ? '1-Year Pass' : `${pendingReq.subscriptionPlan.toUpperCase()} Pass`} (MVR {pendingReq.subscriptionPriceMvr})</strong>. Super Admin will verify your payment slip and activate your subscription.
+                  </p>
+                  <div className="text-[11px] text-amber-400 font-mono">
+                    Request ID: {pendingReq.id} • Submitted on {new Date(pendingReq.createdAt).toLocaleDateString()}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
           {/* Plan Switcher Cards */}
           <div>
-            <h3 className="text-sm font-bold text-white mb-3">Choose a Plan to Switch to:</h3>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3">
+              <div>
+                <h3 className="text-sm font-bold text-white">Available Cinema Subscription Plans</h3>
+                <p className="text-xs text-slate-400">Select a plan to subscribe. Requests are approved by Super Admin upon transfer verification.</p>
+              </div>
+            </div>
+
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               {/* Free Trial Card */}
               <div className={`rounded-2xl p-5 border transition flex flex-col justify-between ${
@@ -1906,15 +1951,10 @@ export const TenantAdminPage: React.FC = () => {
                 </div>
                 <button
                   type="button"
-                  onClick={() => handleSwitchSubscription('free_trial')}
-                  disabled={currentTenant.subscriptionModel === 'free_trial'}
-                  className={`mt-4 w-full py-2.5 rounded-xl text-xs font-bold transition ${
-                    currentTenant.subscriptionModel === 'free_trial'
-                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                      : 'bg-slate-800 hover:bg-slate-700 text-white'
-                  }`}
+                  disabled
+                  className="mt-4 w-full py-2.5 rounded-xl text-xs font-bold bg-slate-800 text-slate-500 cursor-not-allowed"
                 >
-                  {currentTenant.subscriptionModel === 'free_trial' ? 'Current Plan' : 'Switch to Free Trial'}
+                  {currentTenant.subscriptionModel === 'free_trial' ? '✓ Current Active Plan' : 'Free Trial (1-Time)'}
                 </button>
               </div>
 
@@ -1942,18 +1982,26 @@ export const TenantAdminPage: React.FC = () => {
                     <li>✓ 0% ticket commission</li>
                   </ul>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleSwitchSubscription('weekly')}
-                  disabled={currentTenant.subscriptionModel === 'weekly'}
-                  className={`mt-4 w-full py-2.5 rounded-xl text-xs font-bold transition ${
-                    currentTenant.subscriptionModel === 'weekly'
-                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                      : 'bg-teal-500 hover:bg-teal-400 text-slate-950 font-black'
-                  }`}
-                >
-                  {currentTenant.subscriptionModel === 'weekly' ? 'Current Plan' : 'Switch to Weekly (MVR 149)'}
-                </button>
+                {(() => {
+                  const isCurrent = currentTenant.subscriptionModel === 'weekly';
+                  const isPending = tenantRequests.some(r => r.status === 'pending' && r.subscriptionPlan === 'weekly' && ((r.tenantCode && r.tenantCode.toLowerCase() === currentTenant.tenantCode?.toLowerCase()) || r.contactEmail.toLowerCase() === currentTenant.ownerEmail.toLowerCase()));
+                  return (
+                    <button
+                      type="button"
+                      disabled={isCurrent || isPending}
+                      onClick={() => handleOpenUpgradeModal('weekly')}
+                      className={`mt-4 w-full py-2.5 rounded-xl text-xs font-bold transition ${
+                        isCurrent
+                          ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                          : isPending
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 cursor-not-allowed'
+                          : 'bg-teal-500 hover:bg-teal-400 text-slate-950 font-black shadow-md'
+                      }`}
+                    >
+                      {isCurrent ? '✓ Current Active Plan' : isPending ? '⏳ Pending Approval' : 'Subscribe to Weekly (MVR 149) →'}
+                    </button>
+                  );
+                })()}
               </div>
 
               {/* Monthly Plan */}
@@ -1980,18 +2028,26 @@ export const TenantAdminPage: React.FC = () => {
                     <li>✓ 0% commission forever</li>
                   </ul>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleSwitchSubscription('monthly')}
-                  disabled={currentTenant.subscriptionModel === 'monthly'}
-                  className={`mt-4 w-full py-2.5 rounded-xl text-xs font-bold transition ${
-                    currentTenant.subscriptionModel === 'monthly'
-                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                      : 'bg-teal-500 hover:bg-teal-400 text-slate-950 font-black'
-                  }`}
-                >
-                  {currentTenant.subscriptionModel === 'monthly' ? 'Current Plan' : 'Switch to Monthly (MVR 249)'}
-                </button>
+                {(() => {
+                  const isCurrent = currentTenant.subscriptionModel === 'monthly';
+                  const isPending = tenantRequests.some(r => r.status === 'pending' && r.subscriptionPlan === 'monthly' && ((r.tenantCode && r.tenantCode.toLowerCase() === currentTenant.tenantCode?.toLowerCase()) || r.contactEmail.toLowerCase() === currentTenant.ownerEmail.toLowerCase()));
+                  return (
+                    <button
+                      type="button"
+                      disabled={isCurrent || isPending}
+                      onClick={() => handleOpenUpgradeModal('monthly')}
+                      className={`mt-4 w-full py-2.5 rounded-xl text-xs font-bold transition ${
+                        isCurrent
+                          ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                          : isPending
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 cursor-not-allowed'
+                          : 'bg-teal-500 hover:bg-teal-400 text-slate-950 font-black shadow-lg shadow-teal-500/20'
+                      }`}
+                    >
+                      {isCurrent ? '✓ Current Active Plan' : isPending ? '⏳ Pending Approval' : 'Subscribe to Monthly (MVR 249) →'}
+                    </button>
+                  );
+                })()}
               </div>
 
               {/* 1-Year Pass */}
@@ -2018,18 +2074,26 @@ export const TenantAdminPage: React.FC = () => {
                     <li>✓ 0% ticket fee</li>
                   </ul>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => handleSwitchSubscription('yearly')}
-                  disabled={currentTenant.subscriptionModel === 'yearly' || currentTenant.subscriptionModel === 'one_month'}
-                  className={`mt-4 w-full py-2.5 rounded-xl text-xs font-bold transition ${
-                    currentTenant.subscriptionModel === 'yearly' || currentTenant.subscriptionModel === 'one_month'
-                      ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
-                      : 'bg-teal-500 hover:bg-teal-400 text-slate-950 font-black'
-                  }`}
-                >
-                  {(currentTenant.subscriptionModel === 'yearly' || currentTenant.subscriptionModel === 'one_month') ? 'Current Plan' : 'Switch to 1-Year Pass (MVR 499)'}
-                </button>
+                {(() => {
+                  const isCurrent = currentTenant.subscriptionModel === 'yearly' || currentTenant.subscriptionModel === 'one_month';
+                  const isPending = tenantRequests.some(r => r.status === 'pending' && (r.subscriptionPlan === 'yearly' || r.subscriptionPlan === 'one_month') && ((r.tenantCode && r.tenantCode.toLowerCase() === currentTenant.tenantCode?.toLowerCase()) || r.contactEmail.toLowerCase() === currentTenant.ownerEmail.toLowerCase()));
+                  return (
+                    <button
+                      type="button"
+                      disabled={isCurrent || isPending}
+                      onClick={() => handleOpenUpgradeModal('yearly')}
+                      className={`mt-4 w-full py-2.5 rounded-xl text-xs font-bold transition ${
+                        isCurrent
+                          ? 'bg-slate-800 text-slate-500 cursor-not-allowed'
+                          : isPending
+                          ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40 cursor-not-allowed'
+                          : 'bg-gradient-to-r from-teal-500 to-amber-500 hover:from-teal-400 hover:to-amber-400 text-slate-950 font-black shadow-lg shadow-teal-500/20'
+                      }`}
+                    >
+                      {isCurrent ? '✓ Current Active Plan' : isPending ? '⏳ Pending Approval' : 'Subscribe to 1-Year Pass (MVR 499) →'}
+                    </button>
+                  );
+                })()}
               </div>
             </div>
           </div>
@@ -2823,6 +2887,140 @@ export const TenantAdminPage: React.FC = () => {
                 {isDeletingProfile ? 'Deleting...' : 'Permanently Delete'}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* SUBSCRIPTION UPGRADE REQUEST MODAL */}
+      {showUpgradeModal && currentTenant && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm animate-in fade-in">
+          <div className="bg-slate-900 border border-teal-500/30 rounded-2xl p-6 max-w-lg w-full space-y-5 shadow-2xl relative">
+            <button
+              onClick={() => setShowUpgradeModal(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div>
+              <div className="flex items-center space-x-2">
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                  Plan Upgrade
+                </span>
+                <span className="text-xs text-slate-400 font-mono">
+                  Cinema Code: #{currentTenant.tenantCode || currentTenant.slug}
+                </span>
+              </div>
+              <h3 className="text-lg font-bold text-white mt-1">
+                Subscribe to {targetUpgradePlan === 'yearly' ? '1-Year Pass' : `${targetUpgradePlan.toUpperCase()} Pass`}
+              </h3>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Transfer the subscription fee to CinemaMV and upload the transfer receipt slip. Super Admin will verify and activate your plan.
+              </p>
+            </div>
+
+            <div className="p-4 rounded-xl bg-slate-950 border border-slate-800 space-y-2">
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-400">Selected Plan:</span>
+                <span className="font-bold text-white uppercase">{targetUpgradePlan === 'yearly' ? '1-Year Pass' : `${targetUpgradePlan} Pass`}</span>
+              </div>
+              <div className="flex justify-between items-center text-xs">
+                <span className="text-slate-400">Total Due:</span>
+                <span className="text-base font-black text-teal-400">
+                  MVR {targetUpgradePlan === 'weekly' ? 149 : targetUpgradePlan === 'monthly' ? 249 : 499}
+                </span>
+              </div>
+              <div className="flex justify-between items-center text-xs border-t border-slate-800/80 pt-2 text-emerald-400 font-medium">
+                <span>Platform Commission:</span>
+                <span>0% Ticket Fees Guaranteed</span>
+              </div>
+            </div>
+
+            {/* CinemaMV Platform Bank Details for Subscription Transfer */}
+            <div className="p-4 rounded-xl bg-teal-500/10 border border-teal-500/20 space-y-2 text-xs">
+              <div className="font-bold text-teal-300 flex items-center space-x-1.5">
+                <CreditCard className="w-4 h-4 shrink-0" />
+                <span>CinemaMV Platform Payment Account</span>
+              </div>
+              <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                <div>
+                  <span className="text-slate-400 block">Bank Name:</span>
+                  <span className="font-medium text-white">Bank of Maldives (BML)</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block">Account Currency:</span>
+                  <span className="font-medium text-white">MVR (Maldivian Rufiyaa)</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-slate-400 block">Account Number:</span>
+                  <span className="font-mono font-bold text-teal-300 text-sm">7701 1928 4401 001</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-slate-400 block">Account Name:</span>
+                  <span className="font-medium text-white">CinemaMV Platform Pvt Ltd</span>
+                </div>
+                <div className="col-span-2">
+                  <span className="text-slate-400 block">Transfer Memo / Remarks:</span>
+                  <span className="font-mono text-amber-300 font-bold">SUB-{currentTenant.tenantCode || currentTenant.slug}</span>
+                </div>
+              </div>
+            </div>
+
+            <form onSubmit={handleSubmitSubscriptionRequest} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Upload BML Transfer Slip Receipt <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  required
+                  onChange={handleSlipUploadForUpgrade}
+                  className="block w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-teal-500 file:text-slate-950 hover:file:bg-teal-400 cursor-pointer"
+                />
+                {upgradeSlipUrl && (
+                  <div className="mt-3 p-2 rounded-xl bg-slate-950 border border-slate-800 flex items-center space-x-3">
+                    <img
+                      src={upgradeSlipUrl}
+                      alt="Slip Preview"
+                      className="w-16 h-16 object-cover rounded-lg border border-slate-700"
+                    />
+                    <span className="text-xs text-emerald-400 font-medium">✓ Receipt attached successfully</span>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Notes / Transaction Reference (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={upgradeNotes}
+                  onChange={(e) => setUpgradeNotes(e.target.value)}
+                  placeholder="e.g., Transfer ref BML-992144 from Ally"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:border-teal-500"
+                />
+              </div>
+
+              <div className="flex justify-end space-x-3 pt-2 border-t border-slate-800">
+                <button
+                  type="button"
+                  onClick={() => setShowUpgradeModal(false)}
+                  className="px-4 py-2 rounded-xl bg-slate-800 text-slate-300 text-xs font-medium hover:bg-slate-700"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={!upgradeSlipUrl || isSubmittingUpgrade}
+                  className="px-5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 disabled:opacity-40 disabled:cursor-not-allowed text-slate-950 font-bold text-xs shadow-lg shadow-teal-500/20 transition flex items-center space-x-1.5"
+                >
+                  <Send className="w-3.5 h-3.5" />
+                  <span>{isSubmittingUpgrade ? 'Submitting Request...' : 'Submit for Super Admin Approval'}</span>
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}
