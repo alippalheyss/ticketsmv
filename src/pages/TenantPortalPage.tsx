@@ -33,9 +33,55 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
     const loadTenant = async () => {
       let tFound = cinemaStore.getTenantBySlug(tenantSlug);
       if (!tFound) {
-        // Attempt cloud sync if available
+        // 1. Attempt cloud sync from Supabase if configured
         await cinemaStore.syncFromSupabase();
         tFound = cinemaStore.getTenantBySlug(tenantSlug);
+      }
+
+      // 2. If still not found and running on a custom subdomain, request sync from apex domain bridge
+      if (!tFound && typeof window !== 'undefined') {
+        const isSubdomain = window.location.hostname.includes('.cinemamv.online') || 
+          (window.location.hostname.endsWith('.localhost') && window.location.hostname !== 'localhost');
+
+        if (isSubdomain) {
+          const bridgeOrigin = window.location.hostname.includes('.localhost')
+            ? `http://localhost:${window.location.port || '5173'}`
+            : 'https://cinemamv.online';
+
+          const handleBridgeMessage = (ev: MessageEvent) => {
+            if (ev.data && ev.data.type === 'CINEMAMV_SYNC_PAYLOAD' && ev.data.payload) {
+              cinemaStore.importSyncPayload(ev.data.payload);
+              const syncedTenant = cinemaStore.getTenantBySlug(tenantSlug);
+              if (syncedTenant) {
+                setTenant(syncedTenant);
+                setHalls(cinemaStore.getHalls(syncedTenant.id));
+                setScreens(cinemaStore.getScreens().filter((s) => s.tenantId === syncedTenant.id));
+                setMovies(cinemaStore.getMovies(syncedTenant.id).filter((m) => m.published !== false));
+                setShowtimes(cinemaStore.getShowtimes(syncedTenant.id));
+                setLoading(false);
+              }
+            }
+          };
+
+          window.addEventListener('message', handleBridgeMessage);
+
+          let frame = document.getElementById('cinemamv-bridge') as HTMLIFrameElement;
+          if (!frame) {
+            frame = document.createElement('iframe');
+            frame.id = 'cinemamv-bridge';
+            frame.style.display = 'none';
+            frame.src = `${bridgeOrigin}/sync-bridge.html`;
+            document.body.appendChild(frame);
+          } else {
+            frame.contentWindow?.postMessage({ type: 'CINEMAMV_REQUEST_SYNC' }, '*');
+          }
+
+          setTimeout(() => {
+            window.removeEventListener('message', handleBridgeMessage);
+            setLoading(false);
+          }, 1200);
+          return;
+        }
       }
 
       if (tFound) {

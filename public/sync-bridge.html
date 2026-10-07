@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>CinemaMV Cross-Subdomain Sync Bridge</title>
+</head>
+<body>
+<script>
+  (function() {
+    function sendData(targetWindow) {
+      try {
+        var payload = {
+          tenants: localStorage.getItem('mv_cinemamv_tenants_v1'),
+          halls: localStorage.getItem('mv_cinemamv_halls_v1'),
+          screens: localStorage.getItem('mv_cinemamv_screens_v1'),
+          showtimes: localStorage.getItem('mv_cinemamv_showtimes_v1'),
+          movies: localStorage.getItem('mv_cinemamv_movies_v1'),
+          tombstones: localStorage.getItem('mv_cinemamv_tombstones_v1')
+        };
+        (targetWindow || window.parent).postMessage({
+          type: 'CINEMAMV_SYNC_PAYLOAD',
+          payload: payload
+        }, '*');
+      } catch (err) {}
+    }
+
+    window.addEventListener('message', function(ev) {
+      if (ev.data && ev.data.type === 'CINEMAMV_REQUEST_SYNC') {
+        sendData(ev.source);
+      }
+    });
+
+    if (window.parent && window.parent !== window) {
+      sendData(window.parent);
+    }
+  })();
+</script>
+</body>
+</html>

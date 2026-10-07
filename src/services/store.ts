@@ -493,7 +493,16 @@ function getCrossDomainCookie(name: string): string | null {
 }
 
 function sanitizeTenantsForCookie(tenants: Tenant[]): any[] {
-  return tenants.map(t => ({
+  // CRITICAL: NEVER include the 4KB of unchanged default initial tenants in the cookie!
+  // Filter ONLY to custom tenants (e.g. test1) or modified default tenants.
+  const defaultIds = new Set(['tenant-1', 'tenant-2', 'tenant-3']);
+  const customOrModified = tenants.filter(t => {
+    if (!defaultIds.has(t.id)) return true;
+    const defaultOriginal = INITIAL_TENANTS.find(x => x.id === t.id);
+    return defaultOriginal && (t.slug !== defaultOriginal.slug || t.name !== defaultOriginal.name);
+  });
+
+  return customOrModified.map(t => ({
     id: t.id,
     name: t.name,
     slug: t.slug,
@@ -504,9 +513,15 @@ function sanitizeTenantsForCookie(tenants: Tenant[]): any[] {
     subscriptionPriceMvr: t.subscriptionPriceMvr,
     ownerEmail: t.ownerEmail,
     branding: {
-      ...t.branding,
-      logoUrl: t.branding.logoUrl?.startsWith('data:') ? '' : t.branding.logoUrl,
-      bannerUrl: t.branding.bannerUrl?.startsWith('data:') ? '' : t.branding.bannerUrl,
+      island: t.branding?.island || 'Malé',
+      atoll: t.branding?.atoll || 'Kaafu',
+      contactPhone: t.branding?.contactPhone || '',
+      contactViber: t.branding?.contactViber || '',
+      logoUrl: t.branding?.logoUrl?.startsWith('data:') ? '' : (t.branding?.logoUrl || ''),
+      bannerUrl: t.branding?.bannerUrl?.startsWith('data:') ? '' : (t.branding?.bannerUrl || ''),
+      terms: t.branding?.terms || '',
+      taglineEn: t.branding?.taglineEn || '',
+      taglineDv: t.branding?.taglineDv || ''
     }
   }));
 }
@@ -685,6 +700,55 @@ class MaldivianCinemaStore {
       console.warn('Supabase remote sync failed / offline fallback used:', e);
     } finally {
       this.supabaseSyncing = false;
+    }
+  }
+
+  public importSyncPayload(payload: any): boolean {
+    if (!payload) return false;
+    let changed = false;
+    try {
+      if (payload.tenants) {
+        const incomingTenants: Tenant[] = JSON.parse(payload.tenants);
+        if (Array.isArray(incomingTenants)) {
+          const current = this.getTenants();
+          incomingTenants.forEach((it) => {
+            const idx = current.findIndex(x => x.id === it.id || x.slug.toLowerCase() === it.slug.toLowerCase());
+            if (idx >= 0) {
+              current[idx] = { ...current[idx], ...it };
+            } else {
+              current.push(it);
+            }
+          });
+          localStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(current));
+          changed = true;
+        }
+      }
+      if (payload.halls) {
+        localStorage.setItem(STORAGE_KEYS.HALLS, payload.halls);
+        changed = true;
+      }
+      if (payload.screens) {
+        localStorage.setItem(STORAGE_KEYS.SCREENS, payload.screens);
+        changed = true;
+      }
+      if (payload.showtimes) {
+        localStorage.setItem(STORAGE_KEYS.SHOWTIMES, payload.showtimes);
+        changed = true;
+      }
+      if (payload.movies) {
+        localStorage.setItem(STORAGE_KEYS.MOVIES, payload.movies);
+        changed = true;
+      }
+      if (payload.tombstones) {
+        localStorage.setItem('mv_cinemamv_tombstones_v1', payload.tombstones);
+        changed = true;
+      }
+      if (changed) {
+        this.broadcastSync();
+      }
+      return changed;
+    } catch {
+      return false;
     }
   }
 
