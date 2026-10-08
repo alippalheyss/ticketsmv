@@ -66,6 +66,50 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
     };
   }, [tenantSlug]);
 
+  // Group showtimes by session: (movieId, hallId, date, startTime)
+  // Shared hall screens are combined so visitors see 1 show for that time slot instead of duplicate cards
+  const groupedSessions = React.useMemo(() => {
+    const map = new Map<string, {
+      primaryShowtime: Showtime;
+      allShowtimes: Showtime[];
+      screens: Screen[];
+      movie: Movie | undefined;
+      hall: Hall | undefined;
+      totalAvailableSeats: number;
+      minPrice: number;
+    }>();
+
+    showtimes.forEach((st) => {
+      const key = `${st.movieId}_${st.hallId}_${st.date}_${st.startTime}`;
+      const screen = screens.find((s) => s.id === st.screenId);
+      const bookedCount = cinemaStore.getBookedSeatIds(st.id, st.screenId).size;
+      const totalCapacity = screen ? screen.layout.seats.filter(s => s.active && s.type !== 'aisle').length : 50;
+      const availableSeats = Math.max(0, totalCapacity - bookedCount);
+
+      if (!map.has(key)) {
+        map.set(key, {
+          primaryShowtime: st,
+          allShowtimes: [st],
+          screens: screen ? [screen] : [],
+          movie: movies.find((m) => m.id === st.movieId),
+          hall: halls.find((h) => h.id === st.hallId),
+          totalAvailableSeats: availableSeats,
+          minPrice: st.priceTiers.standard
+        });
+      } else {
+        const entry = map.get(key)!;
+        entry.allShowtimes.push(st);
+        if (screen && !entry.screens.some((s) => s.id === screen.id)) {
+          entry.screens.push(screen);
+        }
+        entry.totalAvailableSeats += availableSeats;
+        entry.minPrice = Math.min(entry.minPrice, st.priceTiers.standard);
+      }
+    });
+
+    return Array.from(map.values());
+  }, [showtimes, screens, movies, halls]);
+
   if (loading) {
     return (
       <div className="min-h-[50vh] flex items-center justify-center">
@@ -219,13 +263,9 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
 
         {/* Screening Cards */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {showtimes.map((st) => {
-            const movie = movies.find((m) => m.id === st.movieId);
-            const screen = screens.find((s) => s.id === st.screenId);
-            const hall = halls.find((h) => h.id === st.hallId);
-            const bookedCount = cinemaStore.getBookedSeatIds(st.id).size;
-            const totalCapacity = screen ? screen.layout.seats.filter(s => s.active && s.type !== 'aisle').length : 50;
-            const availableSeats = Math.max(0, totalCapacity - bookedCount);
+          {groupedSessions.map((session) => {
+            const { primaryShowtime: st, movie, hall, screens: sessionScreens, totalAvailableSeats, minPrice } = session;
+            const isSharedHall = sessionScreens.length > 1;
 
             return (
               <div
@@ -243,6 +283,11 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
                     <span className="absolute top-3 left-3 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-slate-950">
                       {movie?.ageRating}
                     </span>
+                    {isSharedHall && (
+                      <span className="absolute top-3 right-3 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-teal-500 text-slate-950 shadow-md">
+                        Shared Hall • {sessionScreens.length} Screens
+                      </span>
+                    )}
                   </div>
 
                   <div className="p-5 space-y-2.5">
@@ -257,16 +302,20 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
                         <span className="font-mono font-bold text-teal-300">{st.date} @ {st.startTime}</span>
                       </div>
                       <div className="flex justify-between">
-                        <span className="text-slate-400">Screen:</span>
-                        <span className="text-slate-200 font-semibold">{screen?.screenName}</span>
-                      </div>
-                      <div className="flex justify-between">
                         <span className="text-slate-400">Hall:</span>
                         <span className="text-slate-200">{hall?.name}</span>
                       </div>
                       <div className="flex justify-between">
+                        <span className="text-slate-400">Screen Layout:</span>
+                        <span className="text-slate-200 font-semibold">
+                          {isSharedHall 
+                            ? `Shared Hall (${sessionScreens.length} Screens)` 
+                            : sessionScreens[0]?.screenName || 'Screen 1'}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
                         <span className="text-slate-400">Available:</span>
-                        <span className="font-bold text-emerald-400">{availableSeats} seats left</span>
+                        <span className="font-bold text-emerald-400">{totalAvailableSeats} seats left</span>
                       </div>
                     </div>
                   </div>
@@ -277,7 +326,7 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
                     to={`/book/${st.id}`}
                     className="w-full flex items-center justify-center space-x-2 py-3 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-teal-500/20 transition"
                   >
-                    <span>Pick Seats & Reserve (From {formatCurrency(st.priceTiers.standard)})</span>
+                    <span>Pick Seats & Reserve (From {formatCurrency(minPrice)})</span>
                     <ChevronRight className="w-4 h-4" />
                   </Link>
                 </div>
@@ -285,7 +334,7 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
             );
           })}
 
-          {showtimes.length === 0 && (
+          {groupedSessions.length === 0 && (
             <div className="col-span-full p-12 text-center glass-panel rounded-2xl border border-slate-800 text-slate-400 text-xs">
               No movie screenings currently scheduled for this cinema. Check back soon!
             </div>

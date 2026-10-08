@@ -521,10 +521,13 @@ export const ValidatorPage: React.FC = () => {
                         {validationResult.booking?.bookingRef}
                       </span>
                     </div>
-                    <div className="flex justify-between">
+                    <div className="flex justify-between items-start">
                       <span className="text-slate-400">Seats ({validationResult.booking?.seats.length}):</span>
-                      <span className="font-bold text-white">
-                        {validationResult.booking?.seats.map((s) => s.label).join(', ')}
+                      <span className="font-bold text-white text-right max-w-[200px]">
+                        {validationResult.booking?.seats.map((s) => {
+                          const scr = cinemaStore.getScreenById(s.screenId || '');
+                          return scr ? `${scr.screenName}: ${s.label}` : s.label;
+                        }).join(', ')}
                       </span>
                     </div>
                     <div className="flex justify-between">

@@ -186,6 +186,7 @@ export interface Booking {
 
 export interface SeatHold {
   showtimeId: string;
+  screenId?: string;
   seatId: string;
   sessionId: string;
   expiresAt: number; // timestamp ms

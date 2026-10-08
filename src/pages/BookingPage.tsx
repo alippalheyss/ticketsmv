@@ -5,8 +5,8 @@ import { Showtime, Screen, Movie, Hall, Tenant, BookedSeat } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { SeatMap } from '../components/SeatMap';
 import { 
-  Film, MapPin, Calendar, Clock, ArrowLeft, ShieldCheck, 
-  ChevronRight, Ticket, Sparkles, LayoutGrid, Eye, AlertCircle, Ban 
+  Film, Calendar, Clock, ArrowLeft, 
+  ChevronRight, Ticket, LayoutGrid, AlertCircle, Ban, Check 
 } from 'lucide-react';
 
 export const BookingPage: React.FC = () => {
@@ -15,16 +15,12 @@ export const BookingPage: React.FC = () => {
   const { t, formatCurrency, isDhivehi } = useLanguage();
 
   const [showtime, setShowtime] = useState<Showtime | null>(null);
-  const [screen, setScreen] = useState<Screen | null>(null);
+  const [activeScreenId, setActiveScreenId] = useState<string>('');
   const [movie, setMovie] = useState<Movie | null>(null);
   const [hall, setHall] = useState<Hall | null>(null);
   const [tenant, setTenant] = useState<Tenant | null>(null);
   const [hallScreens, setHallScreens] = useState<Screen[]>([]);
   const [hallShowtimes, setHallShowtimes] = useState<Showtime[]>([]);
-  const [allMovies, setAllMovies] = useState<Movie[]>([]);
-
-  // Layout view mode: 'shared_hall' shows all screens in the shared room on one page!
-  const [viewMode, setViewMode] = useState<'shared_hall' | 'focused'>('shared_hall');
   const [selectedSeats, setSelectedSeats] = useState<BookedSeat[]>([]);
 
   useEffect(() => {
@@ -32,14 +28,12 @@ export const BookingPage: React.FC = () => {
     const st = cinemaStore.getShowtimeById(showtimeId);
     if (st) {
       setShowtime(st);
-      const sc = cinemaStore.getScreenById(st.screenId);
-      if (sc) setScreen(sc);
+      setActiveScreenId(st.screenId);
       const mv = cinemaStore.getMovieById(st.movieId);
       if (mv) setMovie(mv);
       const hl = cinemaStore.getHalls().find((h) => h.id === st.hallId);
       if (hl) {
         setHall(hl);
-        // Get all screens in this hall
         const screensInHall = cinemaStore.getScreens(hl.id);
         setHallScreens(screensInHall);
       }
@@ -47,11 +41,10 @@ export const BookingPage: React.FC = () => {
       if (tn) setTenant(tn);
 
       setHallShowtimes(cinemaStore.getShowtimes(st.tenantId));
-      setAllMovies(cinemaStore.getMovies());
     }
   }, [showtimeId]);
 
-  if (!showtime || !screen || !movie) {
+  if (!showtime || !movie) {
     return (
       <div className="max-w-md mx-auto text-center py-20 px-4">
         <Film className="w-16 h-16 text-slate-700 mx-auto mb-4" />
@@ -83,6 +76,21 @@ export const BookingPage: React.FC = () => {
     );
   }
 
+  // Active Screen computation
+  const activeScreen = hallScreens.find((s) => s.id === activeScreenId) || 
+    hallScreens.find((s) => s.id === showtime.screenId) || 
+    null;
+
+  // Active Showtime for the selected screen in this hall session
+  const activeShowtime = activeScreen
+    ? (hallShowtimes.find(
+        (st) => st.screenId === activeScreen.id && 
+                st.date === showtime.date && 
+                st.startTime === showtime.startTime &&
+                st.movieId === showtime.movieId
+      ) || showtime)
+    : showtime;
+
   const isCancelled = showtime.status === 'cancelled';
   const totalPrice = selectedSeats.reduce((sum, s) => sum + s.price, 0);
 
@@ -103,39 +111,13 @@ export const BookingPage: React.FC = () => {
     return posA - posB;
   });
 
-  // Switch screens to book seats seamlessly without seat cross-contamination
-  const handleSwitchToScreen = (targetScreen: Screen) => {
-    if (targetScreen.id === screen.id) return;
-    setSelectedSeats([]);
-
-    // 1. Look for existing showtime on targetScreen for this movie and date
-    let targetShow = hallShowtimes.find(
-      (st) => st.screenId === targetScreen.id && st.date === showtime.date && st.movieId === showtime.movieId
-    );
-
-    // 2. If not found, look for any showtime on targetScreen on that date
-    if (!targetShow) {
-      targetShow = hallShowtimes.find(
-        (st) => st.screenId === targetScreen.id && st.date === showtime.date
-      );
-    }
-
-    // 3. If targetScreen has no scheduled slot yet, auto-provision a dedicated showtime for this screen
-    if (!targetShow) {
-      targetShow = cinemaStore.getOrCreateShowtimeForScreen(targetScreen.id, showtime);
-      setHallShowtimes(cinemaStore.getShowtimes(showtime.tenantId));
-    }
-
-    if (targetShow) {
-      navigate(`/book/${targetShow.id}`);
-    }
-  };
+  const isMultiScreenHall = hallScreens.length > 1;
 
   return (
-    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
+    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
       {/* Back button & Title Header */}
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-6 border-b border-slate-800">
-        <div className="flex items-center space-x-4">
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 pb-4 border-b border-slate-800">
+        <div className="flex items-center space-x-3 sm:space-x-4">
           <button
             onClick={() => navigate(-1)}
             className="p-2 rounded-xl bg-slate-900 border border-slate-800 hover:bg-slate-800 text-slate-300 transition"
@@ -151,90 +133,32 @@ export const BookingPage: React.FC = () => {
               <span className="text-slate-500">•</span>
               <span className="text-xs text-slate-400">{hall?.name}</span>
             </div>
-            <h1 className="text-xl sm:text-2xl font-bold text-white flex items-center space-x-2">
+            <h1 className="text-lg sm:text-2xl font-bold text-white flex items-center space-x-2">
               <span>{movie.titleEn}</span>
-              <span className="font-dhivehi text-teal-400 text-base font-normal">({movie.titleDv})</span>
+              <span className="font-dhivehi text-teal-400 text-sm sm:text-base font-normal">({movie.titleDv})</span>
             </h1>
           </div>
         </div>
 
-        {/* Screening Meta pill & Hall Multi-Screen Switcher */}
-        <div className="flex flex-wrap items-center gap-3">
-          <div className="flex items-center space-x-3 text-xs bg-slate-900/90 border border-slate-800 px-4 py-2.5 rounded-xl">
-            <div className="flex items-center space-x-1.5 text-slate-300">
-              <Calendar className="w-3.5 h-3.5 text-teal-400" />
-              <span className="font-medium">{showtime.date}</span>
-            </div>
-            <span className="text-slate-600">|</span>
-            <div className="flex items-center space-x-1.5 text-slate-300">
-              <Clock className="w-3.5 h-3.5 text-amber-400" />
-              <span className="font-mono font-bold text-white">{showtime.startTime}</span>
-            </div>
-            <span className="text-slate-600">|</span>
-            <span className="text-teal-400 font-semibold">{screen.screenName}</span>
+        {/* Screening Meta Pill */}
+        <div className="flex items-center space-x-3 text-xs bg-slate-900/90 border border-slate-800 px-4 py-2 rounded-xl self-start lg:self-auto">
+          <div className="flex items-center space-x-1.5 text-slate-300">
+            <Calendar className="w-3.5 h-3.5 text-teal-400" />
+            <span className="font-medium">{showtime.date}</span>
           </div>
-
-          {/* View Mode Toggle when hall has multiple screens */}
-          {hallScreens.length > 1 && (
-            <div className="flex p-1 rounded-xl bg-slate-900 border border-slate-800">
-              <button
-                onClick={() => setViewMode('shared_hall')}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                  viewMode === 'shared_hall'
-                    ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-                title="View all screens in this shared hall room on one page"
-              >
-                <LayoutGrid className="w-3.5 h-3.5" />
-                <span>Shared Hall Room ({hallScreens.length} Screens)</span>
-              </button>
-              <button
-                onClick={() => setViewMode('focused')}
-                className={`flex items-center space-x-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition ${
-                  viewMode === 'focused'
-                    ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20'
-                    : 'text-slate-400 hover:text-white'
-                }`}
-              >
-                <Eye className="w-3.5 h-3.5" />
-                <span>Focused Screen</span>
-              </button>
-            </div>
-          )}
+          <span className="text-slate-600">|</span>
+          <div className="flex items-center space-x-1.5 text-slate-300">
+            <Clock className="w-3.5 h-3.5 text-amber-400" />
+            <span className="font-mono font-bold text-white">{showtime.startTime}</span>
+          </div>
+          <span className="text-slate-600">|</span>
+          <span className="text-teal-400 font-semibold">
+            {isMultiScreenHall 
+              ? `Shared Hall (${hallScreens.length} Screens)` 
+              : activeScreen?.screenName || 'Main Screen'}
+          </span>
         </div>
       </div>
-
-      {/* Screen Switcher Bar for Multi-Screen Hall */}
-      {hallScreens.length > 1 && (
-        <div className="flex flex-wrap items-center gap-2 p-3 rounded-2xl bg-slate-900 border border-slate-800 shadow-md">
-          <span className="text-xs font-bold text-slate-300 mr-2 flex items-center space-x-1.5">
-            <LayoutGrid className="w-4 h-4 text-teal-400" />
-            <span>Switch Screen to Book:</span>
-          </span>
-          <div className="flex flex-wrap items-center gap-2">
-            {sortedHallScreens.map((s) => (
-              <button
-                key={s.id}
-                type="button"
-                onClick={() => handleSwitchToScreen(s)}
-                className={`px-3.5 py-1.5 rounded-xl text-xs font-bold transition flex items-center space-x-1.5 shadow-sm active:scale-95 ${
-                  s.id === screen.id
-                    ? 'bg-teal-500 text-slate-950 shadow-md shadow-teal-500/20 ring-2 ring-teal-400'
-                    : 'bg-slate-800/90 text-slate-300 hover:bg-slate-700 hover:text-white border border-slate-700'
-                }`}
-              >
-                <span>{s.screenName}</span>
-                {s.id === screen.id ? (
-                  <span className="text-[10px] font-extrabold uppercase px-1 rounded bg-slate-950/20 text-slate-950">Active</span>
-                ) : (
-                  <span className="text-[10px] text-teal-400">→</span>
-                )}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
 
       {/* Cancelled Showtime Warning */}
       {isCancelled && (
@@ -249,226 +173,144 @@ export const BookingPage: React.FC = () => {
         </div>
       )}
 
-      {/* Shared Hall Multi-Screen Architectural Banner */}
-      {hallScreens.length > 1 && (
-        <div className="glass-panel rounded-2xl p-4 sm:p-5 border border-slate-800 space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-            <div>
-              <h2 className="text-sm font-bold text-white flex items-center space-x-2">
-                <LayoutGrid className="w-4 h-4 text-teal-400" />
-                <span>{hall?.name} • Shared Hall Architectural Layout</span>
-              </h2>
-              <p className="text-xs text-slate-400 mt-0.5">
-                This large hall contains {hallScreens.length} screens in a single shared room. Tap any screen card below to switch and book seats.
-              </p>
-            </div>
-            <span className="text-xs font-semibold px-2.5 py-1 rounded-full bg-teal-500/10 text-teal-300 border border-teal-500/20 self-start sm:self-auto">
-              Shared Room Layout
+      {/* Sleek, Single-Level Screen Switcher Bar for Multi-Screen Hall */}
+      {isMultiScreenHall && (
+        <div className="bg-slate-900/95 border border-slate-800 rounded-2xl p-3 sm:p-4 shadow-lg space-y-2.5">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-bold text-slate-200 flex items-center space-x-1.5">
+              <LayoutGrid className="w-4 h-4 text-teal-400" />
+              <span>Switch Screen to Select Seats ({hallScreens.length} Screens):</span>
+            </span>
+            <span className="text-xs font-mono font-bold text-teal-300 bg-teal-950/60 border border-teal-500/30 px-2.5 py-0.5 rounded-full">
+              {selectedSeats.length} / 8 seats selected
             </span>
           </div>
 
-          {/* Quick Jump / Position Indicator between screens in this shared hall */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-2">
+          {/* Compact Screen Tabs */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-2">
             {sortedHallScreens.map((s) => {
-              const isSelectedScreen = s.id === screen.id;
-              // Find showtime for this screen
-              const otherShow = hallShowtimes.find((st) => st.screenId === s.id && st.date === showtime.date);
-              const otherMovie = otherShow ? allMovies.find((m) => m.id === otherShow.movieId) : null;
+              const isActive = s.id === activeScreen?.id;
+              const screenSeats = selectedSeats.filter((seat) => seat.screenId === s.id);
 
               return (
                 <button
-                  type="button"
                   key={s.id}
-                  onClick={() => handleSwitchToScreen(s)}
-                  className={`p-3 rounded-xl border text-left text-xs transition flex flex-col justify-between space-y-2 cursor-pointer active:scale-95 ${
-                    isSelectedScreen
-                      ? 'bg-teal-950/40 border-teal-500/60 ring-2 ring-teal-500/20 shadow-lg'
-                      : 'bg-slate-900/60 border-slate-800 hover:border-teal-500/50 hover:bg-slate-800/80'
+                  type="button"
+                  onClick={() => setActiveScreenId(s.id)}
+                  className={`p-2.5 sm:p-3 rounded-xl text-left transition flex items-center justify-between border cursor-pointer active:scale-95 ${
+                    isActive
+                      ? 'bg-teal-500/15 border-teal-500 ring-2 ring-teal-500/30 text-white shadow-lg'
+                      : 'bg-slate-800/60 border-slate-700/60 text-slate-300 hover:bg-slate-800 hover:border-slate-600'
                   }`}
                 >
-                  <div className="flex items-center justify-between w-full">
-                    <span className="font-bold text-white flex items-center space-x-1.5">
-                      <LayoutGrid className="w-3.5 h-3.5 text-teal-400" />
-                      <span>{s.screenName}</span>
-                    </span>
-                    <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold tracking-wider bg-slate-800 text-slate-300">
-                      {s.positionInHall || 'Wing'}
+                  <div className="min-w-0 pr-1">
+                    <div className="flex items-center space-x-1.5">
+                      <span className="text-xs sm:text-sm font-bold truncate text-white">{s.screenName}</span>
+                    </div>
+                    <span className="text-[10px] text-slate-400 uppercase tracking-wider block font-medium">
+                      {s.positionInHall ? `${s.positionInHall} section` : 'Section'}
                     </span>
                   </div>
 
-                  <p className="text-[11px] text-slate-400 truncate w-full">
-                    {otherMovie ? `Playing: ${otherMovie.titleEn}` : 'Screening in shared hall'}
-                  </p>
-
-                  <div className="flex items-center justify-between pt-1 w-full">
-                    <span className="text-[10px] text-slate-500">
-                      {s.layout.rows} Rows • {s.layout.cols} Cols
+                  {screenSeats.length > 0 ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-black bg-teal-500 text-slate-950 flex-shrink-0 shadow-md">
+                      {screenSeats.length} {screenSeats.length === 1 ? 'seat' : 'seats'}
                     </span>
-                    {isSelectedScreen ? (
-                      <span className="text-[10px] font-bold text-teal-400 flex items-center space-x-1">
-                        <Sparkles className="w-3 h-3" />
-                        <span>Active Booking</span>
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-bold text-teal-400 hover:underline">
-                        Switch to Screen →
-                      </span>
-                    )}
-                  </div>
+                  ) : isActive ? (
+                    <span className="px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wider bg-slate-800 text-teal-400 border border-teal-500/30 flex-shrink-0">
+                      Viewing
+                    </span>
+                  ) : (
+                    <span className="text-xs text-slate-500 flex-shrink-0">
+                      →
+                    </span>
+                  )}
                 </button>
               );
             })}
           </div>
+
+          <p className="text-[11px] text-slate-400">
+            💡 You can pick seats from different screens at the same time (up to 8 seats total in this hall). Tap a screen above to view and add its seats.
+          </p>
         </div>
       )}
 
-      {/* SHARED HALL FULL ROOM VIEW (ALL SCREENS ON ONE PAGE) */}
-      {viewMode === 'shared_hall' && hallScreens.length > 1 ? (
-        <div className="space-y-8">
-          <div className="text-center">
-            <h3 className="text-sm font-bold uppercase tracking-widest text-teal-400">
-              Shared Auditorium Overview: All {hallScreens.length} Screens Side-by-Side
-            </h3>
-            <p className="text-xs text-slate-400 mt-1">
-              Select seats on your active screen below ({screen.screenName}) while seeing the other screens in the room.
-            </p>
+      {/* Interactive SeatMap */}
+      {activeScreen ? (
+        <div className="glass-panel rounded-3xl p-3 sm:p-6 border border-slate-800 shadow-2xl relative">
+          <div className="mb-4 pb-3 border-b border-slate-800/80 flex items-center justify-between">
+            <div>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-teal-400">
+                {activeScreen.positionInHall?.toUpperCase() || 'MAIN'} SECTION
+              </span>
+              <h3 className="font-bold text-base text-white">{activeScreen.screenName}</h3>
+            </div>
+            {isMultiScreenHall && (
+              <span className="text-xs text-slate-400">
+                {selectedSeats.filter((s) => s.screenId === activeScreen.id).length} seat(s) selected on this screen
+              </span>
+            )}
           </div>
 
-          {/* Side-by-side or stacked grid representing the shared hall room */}
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-            {sortedHallScreens.map((s) => {
-              const isSelectedScreen = s.id === screen.id;
-
-              return (
-                <div
-                  key={s.id}
-                  onClick={() => !isSelectedScreen && handleSwitchToScreen(s)}
-                  className={`rounded-3xl p-4 sm:p-5 border transition-all flex flex-col justify-between ${
-                    isSelectedScreen
-                      ? 'glass-panel-glow border-teal-500/50 shadow-2xl ring-2 ring-teal-500/20'
-                      : 'glass-panel border-slate-800 opacity-80 hover:opacity-100 hover:border-teal-500/50 cursor-pointer'
-                  }`}
-                >
-                  <div className="mb-4 pb-3 border-b border-slate-800 flex items-center justify-between">
-                    <div>
-                      <span className="text-[10px] font-bold uppercase tracking-wider text-teal-400">
-                        {s.positionInHall?.toUpperCase() || 'WING'} SECTION
-                      </span>
-                      <h4 className="font-bold text-sm text-white">{s.screenName}</h4>
-                    </div>
-                    {isSelectedScreen ? (
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-teal-500/20 text-teal-300 border border-teal-500/40">
-                        Book Here
-                      </span>
-                    ) : (
-                      <span className="text-[10px] font-bold text-teal-400 hover:underline">
-                        Tap to Switch →
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Render interactive SeatMap if active, or preview grid if other screen */}
-                  {isSelectedScreen ? (
-                    <SeatMap
-                      screen={s}
-                      showtime={showtime}
-                      onSeatSelectionChange={(seats) => setSelectedSeats(seats)}
-                      onHoldExpired={() => {
-                        alert('Your 10-minute seat hold has expired. Please reselect your preferred seats.');
-                      }}
-                    />
-                  ) : (
-                    <div className="space-y-4">
-                      {/* Cinema Curved Screen representation */}
-                      <div className="text-center">
-                        <div className="cinema-screen-curve mx-auto max-w-xs mb-1.5 opacity-60" />
-                        <span className="text-[10px] uppercase font-bold text-slate-500">
-                          {s.layout.stageName || s.screenName}
-                        </span>
-                      </div>
-
-                      {/* Mini visual seat matrix preview */}
-                      <div className="overflow-x-auto pb-2 flex flex-col items-center space-y-1">
-                        {s.layout.rowLabels.map((rowLabel) => {
-                          const seatsInRow = s.layout.seats.filter((seat) => seat.row === rowLabel);
-                          return (
-                            <div key={rowLabel} className="flex items-center space-x-1">
-                              <span className="w-3 text-[9px] font-bold text-slate-600">{rowLabel}</span>
-                              <div className="flex items-center space-x-1">
-                                {seatsInRow.map((seat) => (
-                                  <div
-                                    key={seat.id}
-                                    className={`w-4 h-4 rounded text-[8px] flex items-center justify-center font-mono ${
-                                      seat.type === 'vip'
-                                        ? 'bg-amber-950/40 text-amber-500 border border-amber-600/30'
-                                        : seat.type === 'couple'
-                                        ? 'bg-rose-950/40 text-rose-500 border border-rose-600/30'
-                                        : 'bg-slate-800 text-slate-500 border border-slate-700'
-                                    }`}
-                                  >
-                                    {seat.col}
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          );
-                        })}
-                      </div>
-
-                      <div className="pt-2">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleSwitchToScreen(s);
-                          }}
-                          className="w-full py-2.5 px-3 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md transition flex items-center justify-center space-x-1.5 active:scale-95"
-                        >
-                          <LayoutGrid className="w-3.5 h-3.5" />
-                          <span>Switch to {s.screenName} to Book Seats →</span>
-                        </button>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        </div>
-      ) : (
-        /* FOCUSED SCREEN VIEW */
-        <div className="glass-panel rounded-3xl p-4 sm:p-8 border border-slate-800 shadow-2xl relative">
           <SeatMap
-            screen={screen}
-            showtime={showtime}
-            onSeatSelectionChange={(seats) => setSelectedSeats(seats)}
+            key={activeScreen.id}
+            screen={activeScreen}
+            showtime={activeShowtime}
+            initialSelectedSeatIds={selectedSeats.filter((s) => s.screenId === activeScreen.id).map((s) => s.seatId)}
+            totalHallSelectedCount={selectedSeats.length}
+            hallMaxSelectable={8}
+            onSeatSelectionChange={(currentScreenSeats) => {
+              setSelectedSeats((prev) => [
+                ...prev.filter((s) => s.screenId !== activeScreen.id),
+                ...currentScreenSeats,
+              ]);
+            }}
             onHoldExpired={() => {
               alert('Your 10-minute seat hold has expired. Please reselect your preferred seats.');
             }}
           />
+        </div>
+      ) : (
+        <div className="p-8 text-center text-slate-400 text-sm glass-panel rounded-2xl">
+          Screen not found in this hall.
         </div>
       )}
 
       {/* Bottom Sticky Action Bar */}
       <div className="sticky bottom-4 z-40">
         <div className="glass-panel-glow max-w-4xl mx-auto rounded-2xl p-4 border border-teal-500/30 shadow-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 backdrop-blur-xl bg-[#0a0f1d]/95">
-          <div className="flex items-center space-x-4">
+          <div className="flex items-center space-x-3">
             <div className="p-3 rounded-xl bg-teal-500/20 text-teal-400 border border-teal-500/40 hidden sm:block">
               <Ticket className="w-6 h-6" />
             </div>
             <div>
-              <div className="flex items-center space-x-2">
+              <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-xs uppercase font-bold text-slate-400">
-                  Selected Seats ({screen.screenName}):
+                  Selected Seats ({selectedSeats.length}/8):
                 </span>
-                <span className="text-sm font-mono font-bold text-teal-300">
-                  {selectedSeats.length > 0
-                    ? selectedSeats.map((s) => s.label).join(', ')
-                    : 'None yet'}
-                </span>
+                {selectedSeats.length > 0 ? (
+                  <div className="flex flex-wrap gap-1">
+                    {sortedHallScreens
+                      .filter((scr) => selectedSeats.some((s) => s.screenId === scr.id))
+                      .map((scr) => {
+                        const scrSeats = selectedSeats.filter((s) => s.screenId === scr.id);
+                        return (
+                          <span
+                            key={scr.id}
+                            className="text-xs font-mono font-bold px-2 py-0.5 rounded-md bg-teal-500/20 text-teal-300 border border-teal-500/30"
+                          >
+                            {scr.screenName}: {scrSeats.map((s) => s.label).join(', ')}
+                          </span>
+                        );
+                      })}
+                  </div>
+                ) : (
+                  <span className="text-xs text-slate-500">None picked yet</span>
+                )}
               </div>
-              <p className="text-xs text-slate-400 mt-0.5">
-                {selectedSeats.length} seat(s) reserved with 10-min live hold
+              <p className="text-xs text-slate-400 mt-1">
+                {selectedSeats.length} seat(s) held across hall • 10-min live hold
               </p>
             </div>
           </div>

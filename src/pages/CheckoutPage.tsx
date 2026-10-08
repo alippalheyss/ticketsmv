@@ -424,7 +424,7 @@ export const CheckoutPage: React.FC = () => {
                 <h4 className="font-bold text-base text-white truncate">{movie.titleEn}</h4>
                 <p className="font-dhivehi text-xs text-teal-400">{movie.titleDv}</p>
                 <p className="text-xs text-slate-400">{tenant?.name}</p>
-                <p className="text-xs text-slate-500">{hall?.name} • {screen.screenName}</p>
+                <p className="text-xs text-slate-500">{hall?.name} • {selectedSeats.some(s => s.screenId && s.screenId !== screen.id) ? 'Shared Hall' : screen.screenName}</p>
                 <div className="pt-1 flex items-center space-x-2 text-[11px] text-amber-400 font-mono">
                   <span>{showtime.date}</span>
                   <span>@</span>
@@ -438,15 +438,25 @@ export const CheckoutPage: React.FC = () => {
               <span className="text-[11px] uppercase font-bold text-slate-400 block">
                 Reserved Seats ({selectedSeats.length}):
               </span>
-              <div className="space-y-1">
-                {selectedSeats.map((s) => (
-                  <div key={s.seatId} className="flex justify-between text-xs">
-                    <span className="font-mono text-slate-200">
-                      Row {s.row} - Seat {s.col} ({s.type})
-                    </span>
-                    <span className="font-bold text-teal-300">{formatCurrency(s.price)}</span>
-                  </div>
-                ))}
+              <div className="space-y-1.5">
+                {selectedSeats.map((s) => {
+                  const seatScreen = cinemaStore.getScreenById(s.screenId || '');
+                  return (
+                    <div key={`${s.screenId || ''}_${s.seatId}`} className="flex justify-between items-center text-xs">
+                      <div className="flex items-center space-x-1.5">
+                        {seatScreen && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-teal-500/15 text-teal-300 border border-teal-500/30">
+                            {seatScreen.screenName}
+                          </span>
+                        )}
+                        <span className="font-mono text-slate-200">
+                          Row {s.row} - Seat {s.col} ({s.type})
+                        </span>
+                      </div>
+                      <span className="font-bold text-teal-300">{formatCurrency(s.price)}</span>
+                    </div>
+                  );
+                })}
               </div>
             </div>
 

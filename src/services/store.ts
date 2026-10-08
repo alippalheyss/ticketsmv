@@ -1020,7 +1020,7 @@ class MaldivianCinemaStore {
   }
 
   // --- SEAT HOLDS (10 MINUTE HOLD LOCK) ---
-  public getSeatHolds(showtimeId: string): SeatHold[] {
+  public getSeatHolds(showtimeId: string, screenId?: string): SeatHold[] {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.SEAT_HOLDS);
       const all: SeatHold[] = data ? JSON.parse(data) : [];
@@ -1029,17 +1029,20 @@ class MaldivianCinemaStore {
       if (active.length !== all.length) {
         localStorage.setItem(STORAGE_KEYS.SEAT_HOLDS, JSON.stringify(active));
       }
-      return active.filter((h) => h.showtimeId === showtimeId);
+      return active.filter((h) => 
+        h.showtimeId === showtimeId && 
+        (!screenId || !h.screenId || h.screenId === screenId)
+      );
     } catch {
       return [];
     }
   }
 
-  public acquireSeatHold(showtimeId: string, seatId: string, sessionId: string, holdMinutes = 10): boolean {
+  public acquireSeatHold(showtimeId: string, seatId: string, sessionId: string, holdMinutes = 10, screenId?: string): boolean {
     const now = Date.now();
     const expiresAt = now + holdMinutes * 60 * 1000;
 
-    const booked = this.getBookedSeatIds(showtimeId);
+    const booked = this.getBookedSeatIds(showtimeId, screenId);
     if (booked.has(seatId)) {
       return false;
     }
@@ -1049,12 +1052,16 @@ class MaldivianCinemaStore {
       let all: SeatHold[] = data ? JSON.parse(data) : [];
       all = all.filter((h) => h.expiresAt > now);
 
-      const existingIndex = all.findIndex((h) => h.showtimeId === showtimeId && h.seatId === seatId);
+      const existingIndex = all.findIndex((h) => 
+        h.showtimeId === showtimeId && 
+        h.seatId === seatId && 
+        (!screenId || !h.screenId || h.screenId === screenId)
+      );
       if (existingIndex >= 0) {
         if (all[existingIndex].sessionId === sessionId) {
           all[existingIndex].expiresAt = expiresAt;
           localStorage.setItem(STORAGE_KEYS.SEAT_HOLDS, JSON.stringify(all));
-          this.pushSeatHold(showtimeId, seatId, sessionId, expiresAt);
+          this.pushSeatHold(showtimeId, seatId, sessionId, expiresAt, screenId);
           this.broadcastSync();
           return true;
         } else {
@@ -1064,12 +1071,13 @@ class MaldivianCinemaStore {
 
       all.push({
         showtimeId,
+        screenId,
         seatId,
         sessionId,
         expiresAt
       });
       localStorage.setItem(STORAGE_KEYS.SEAT_HOLDS, JSON.stringify(all));
-      this.pushSeatHold(showtimeId, seatId, sessionId, expiresAt);
+      this.pushSeatHold(showtimeId, seatId, sessionId, expiresAt, screenId);
       this.broadcastSync();
       return true;
     } catch {
@@ -1077,11 +1085,12 @@ class MaldivianCinemaStore {
     }
   }
 
-  private pushSeatHold(showtimeId: string, seatId: string, sessionId: string, expiresAt: number) {
+  private pushSeatHold(showtimeId: string, seatId: string, sessionId: string, expiresAt: number, screenId?: string) {
     if (!this.cloud) return;
+    const key = screenId ? `${screenId}_${seatId}` : seatId;
     supabase.from(SEAT_HOLDS_TABLE).upsert({
       showtime_id: showtimeId,
-      seat_id: seatId,
+      seat_id: key,
       session_id: sessionId,
       expires_at: new Date(expiresAt).toISOString()
     }, { onConflict: 'showtime_id,seat_id' }).then(({ error }) => {
@@ -1089,15 +1098,21 @@ class MaldivianCinemaStore {
     });
   }
 
-  public releaseSeatHold(showtimeId: string, seatId: string, sessionId: string): void {
+  public releaseSeatHold(showtimeId: string, seatId: string, sessionId: string, screenId?: string): void {
     try {
       const data = localStorage.getItem(STORAGE_KEYS.SEAT_HOLDS);
       let all: SeatHold[] = data ? JSON.parse(data) : [];
-      all = all.filter((h) => !(h.showtimeId === showtimeId && h.seatId === seatId && h.sessionId === sessionId));
+      all = all.filter((h) => !(
+        h.showtimeId === showtimeId && 
+        h.seatId === seatId && 
+        h.sessionId === sessionId &&
+        (!screenId || !h.screenId || h.screenId === screenId)
+      ));
       localStorage.setItem(STORAGE_KEYS.SEAT_HOLDS, JSON.stringify(all));
       if (this.cloud) {
+        const key = screenId ? `${screenId}_${seatId}` : seatId;
         supabase.from(SEAT_HOLDS_TABLE).delete()
-          .eq('showtime_id', showtimeId).eq('seat_id', seatId).eq('session_id', sessionId)
+          .eq('showtime_id', showtimeId).eq('seat_id', key).eq('session_id', sessionId)
           .then(() => {});
       }
       this.broadcastSync();
@@ -1106,14 +1121,28 @@ class MaldivianCinemaStore {
 
   public releaseAllSessionHolds(showtimeId: string, sessionId: string): void {
     try {
+      const baseSt = this.getShowtimeById(showtimeId);
+      const relevantShowtimeIds = new Set<string>([showtimeId]);
+      if (baseSt) {
+        const siblings = this.getShowtimes(baseSt.tenantId).filter(
+          (st) => st.hallId === baseSt.hallId && 
+                  st.date === baseSt.date && 
+                  st.startTime === baseSt.startTime && 
+                  st.movieId === baseSt.movieId
+        );
+        siblings.forEach((st) => relevantShowtimeIds.add(st.id));
+      }
+
       const data = localStorage.getItem(STORAGE_KEYS.SEAT_HOLDS);
       let all: SeatHold[] = data ? JSON.parse(data) : [];
-      all = all.filter((h) => !(h.showtimeId === showtimeId && h.sessionId === sessionId));
+      all = all.filter((h) => !(relevantShowtimeIds.has(h.showtimeId) && h.sessionId === sessionId));
       localStorage.setItem(STORAGE_KEYS.SEAT_HOLDS, JSON.stringify(all));
       if (this.cloud) {
-        supabase.from(SEAT_HOLDS_TABLE).delete()
-          .eq('showtime_id', showtimeId).eq('session_id', sessionId)
-          .then(() => {});
+        relevantShowtimeIds.forEach((sid) => {
+          supabase.from(SEAT_HOLDS_TABLE).delete()
+            .eq('showtime_id', sid).eq('session_id', sessionId)
+            .then(() => {});
+        });
       }
       this.broadcastSync();
     } catch {}
@@ -1135,7 +1164,19 @@ class MaldivianCinemaStore {
   }
 
   public getBookedSeatIds(showtimeId: string, screenId?: string): Set<string> {
-    const list = this.getBookings().filter((b) => b.showtimeId === showtimeId && b.paymentStatus !== 'expired');
+    const baseSt = this.getShowtimeById(showtimeId);
+    const relevantShowtimeIds = new Set<string>([showtimeId]);
+    if (baseSt) {
+      const siblings = this.getShowtimes(baseSt.tenantId).filter(
+        (st) => st.hallId === baseSt.hallId && 
+                st.date === baseSt.date && 
+                st.startTime === baseSt.startTime && 
+                st.movieId === baseSt.movieId
+      );
+      siblings.forEach((st) => relevantShowtimeIds.add(st.id));
+    }
+
+    const list = this.getBookings().filter((b) => relevantShowtimeIds.has(b.showtimeId) && b.paymentStatus !== 'expired');
     const set = new Set<string>();
     list.forEach((b) => {
       b.seats.forEach((s) => {
@@ -1187,7 +1228,7 @@ class MaldivianCinemaStore {
       await this.syncFromSupabase();
       const seatRows = booking.seats.map((s) => ({
         showtime_id: booking.showtimeId,
-        seat_id: s.seatId,
+        seat_id: s.screenId ? `${s.screenId}_${s.seatId}` : s.seatId,
         booking_id: booking.id,
         tenant_id: booking.tenantId
       }));
@@ -1210,9 +1251,9 @@ class MaldivianCinemaStore {
   }
 
   public createBooking(booking: Booking, sessionId: string): { success: boolean; error?: string } {
-    const existingBooked = this.getBookedSeatIds(booking.showtimeId);
     for (const seat of booking.seats) {
-      if (existingBooked.has(seat.seatId)) {
+      const bookedOnScreen = this.getBookedSeatIds(booking.showtimeId, seat.screenId);
+      if (bookedOnScreen.has(seat.seatId)) {
         return { success: false, error: `Seat ${seat.label} has already been reserved or booked by another guest.` };
       }
     }

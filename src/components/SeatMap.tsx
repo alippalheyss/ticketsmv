@@ -12,6 +12,9 @@ interface SeatMapProps {
   onSeatSelectionChange: (selectedSeats: BookedSeat[]) => void;
   onHoldExpired?: () => void;
   maxSelectable?: number;
+  initialSelectedSeatIds?: string[];
+  totalHallSelectedCount?: number;
+  hallMaxSelectable?: number;
 }
 
 export const SeatMap: React.FC<SeatMapProps> = ({
@@ -20,21 +23,31 @@ export const SeatMap: React.FC<SeatMapProps> = ({
   onSeatSelectionChange,
   onHoldExpired,
   maxSelectable = 8,
+  initialSelectedSeatIds,
+  totalHallSelectedCount,
+  hallMaxSelectable = 8,
 }) => {
   const { t, formatCurrency, isDhivehi } = useLanguage();
   const sessionId = useMemo(() => cinemaStore.getOrCreateSessionId(), []);
 
-  const [selectedSeatIds, setSelectedSeatIds] = useState<string[]>([]);
+  const [selectedSeatIds, setSelectedSeatIds] = useState<string[]>(initialSelectedSeatIds || []);
   const [bookedSeatIds, setBookedSeatIds] = useState<Set<string>>(new Set());
   const [otherUserHolds, setOtherUserHolds] = useState<Map<string, number>>(new Map()); // seatId -> expiresAt
   const [remainingTimeSec, setRemainingTimeSec] = useState<number | null>(null);
+
+  // Sync when screen or initialSelectedSeatIds changes
+  useEffect(() => {
+    if (initialSelectedSeatIds !== undefined) {
+      setSelectedSeatIds(initialSelectedSeatIds);
+    }
+  }, [screen.id, initialSelectedSeatIds]);
 
   // Load booked seats and active holds
   const refreshSeatStates = useCallback(() => {
     const booked = cinemaStore.getBookedSeatIds(showtime.id, screen.id);
     setBookedSeatIds(booked);
 
-    const holds = cinemaStore.getSeatHolds(showtime.id);
+    const holds = cinemaStore.getSeatHolds(showtime.id, screen.id);
     const otherMap = new Map<string, number>();
     let earliestMyHoldExpiry: number | null = null;
 
@@ -115,7 +128,7 @@ export const SeatMap: React.FC<SeatMapProps> = ({
 
     if (isCurrentlySelected) {
       // Deselect
-      cinemaStore.releaseSeatHold(showtime.id, seat.id, sessionId);
+      cinemaStore.releaseSeatHold(showtime.id, seat.id, sessionId, screen.id);
       const next = selectedSeatIds.filter((id) => id !== seat.id);
       setSelectedSeatIds(next);
 
@@ -137,14 +150,19 @@ export const SeatMap: React.FC<SeatMapProps> = ({
         setRemainingTimeSec(null);
       }
     } else {
-      // Check max limit
-      if (selectedSeatIds.length >= maxSelectable) {
-        alert(`You can select a maximum of ${maxSelectable} seats per booking.`);
+      // Check total hall booking limit (max 8 across hall)
+      const totalHallCount = totalHallSelectedCount !== undefined
+        ? totalHallSelectedCount
+        : selectedSeatIds.length;
+      const limit = hallMaxSelectable ?? maxSelectable;
+
+      if (totalHallCount >= limit || selectedSeatIds.length >= maxSelectable) {
+        alert(`You can select a maximum of ${limit} seats in total across all screens in the hall.`);
         return;
       }
 
       // Try acquiring 10-minute hold lock
-      const acquired = cinemaStore.acquireSeatHold(showtime.id, seat.id, sessionId, 10);
+      const acquired = cinemaStore.acquireSeatHold(showtime.id, seat.id, sessionId, 10, screen.id);
       if (!acquired) {
         alert('This seat is currently held or was just booked by another guest. Please pick another.');
         refreshSeatStates();

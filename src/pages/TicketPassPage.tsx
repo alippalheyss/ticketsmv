@@ -305,7 +305,7 @@ END:VCALENDAR`;
               <div className="text-xs text-slate-300 space-y-1">
                 <div className="flex items-center space-x-1.5 text-slate-400">
                   <MapPin className="w-3.5 h-3.5 text-teal-400" />
-                  <span>{hall?.name} • {screen?.screenName}</span>
+                  <span>{hall?.name} • {booking.seats.some(s => s.screenId && s.screenId !== screen?.id) ? 'Shared Hall' : screen?.screenName}</span>
                 </div>
                 <div className="flex items-center space-x-1.5 text-slate-400">
                   <Calendar className="w-3.5 h-3.5 text-teal-400" />
@@ -318,14 +318,17 @@ END:VCALENDAR`;
                   Booked Seats ({booking.seats.length}):
                 </span>
                 <div className="flex flex-wrap gap-1.5 mt-1">
-                  {booking.seats.map((s) => (
-                    <span
-                      key={s.seatId}
-                      className="px-2.5 py-0.5 rounded-lg bg-teal-500/20 text-teal-300 font-mono text-xs font-bold border border-teal-500/40"
-                    >
-                      {s.label} ({s.type})
-                    </span>
-                  ))}
+                  {booking.seats.map((s) => {
+                    const scr = cinemaStore.getScreenById(s.screenId || '');
+                    return (
+                      <span
+                        key={`${s.screenId || ''}_${s.seatId}`}
+                        className="px-2.5 py-1 rounded-lg bg-teal-500/20 text-teal-300 font-mono text-xs font-bold border border-teal-500/40"
+                      >
+                        {scr ? `${scr.screenName}: ` : ''}{s.label} ({s.type})
+                      </span>
+                    );
+                  })}
                 </div>
               </div>
             </div>

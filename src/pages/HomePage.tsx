@@ -482,6 +482,36 @@ export const HomePage: React.FC = () => {
                 return true;
               });
 
+              // Consolidate shared hall screens into 1 unified show session
+              const groupedMovieSessions = (() => {
+                const map = new Map<string, {
+                  primaryShowtime: Showtime;
+                  screens: Screen[];
+                  hall?: Hall;
+                  tenant?: Tenant;
+                }>();
+
+                movieShowtimes.forEach((st) => {
+                  const key = `${st.hallId}_${st.date}_${st.startTime}`;
+                  const scr = screens.find((s) => s.id === st.screenId);
+                  if (!map.has(key)) {
+                    map.set(key, {
+                      primaryShowtime: st,
+                      screens: scr ? [scr] : [],
+                      hall: halls.find((h) => h.id === st.hallId),
+                      tenant: tenants.find((t) => t.id === st.tenantId),
+                    });
+                  } else {
+                    const entry = map.get(key)!;
+                    if (scr && !entry.screens.some((s) => s.id === scr.id)) {
+                      entry.screens.push(scr);
+                    }
+                  }
+                });
+
+                return Array.from(map.values());
+              })();
+
               return (
                 <div
                   key={movie.id}
@@ -566,10 +596,9 @@ export const HomePage: React.FC = () => {
                     </span>
 
                     <div className="space-y-2">
-                      {movieShowtimes.map((st) => {
-                        const screen = screens.find((s) => s.id === st.screenId);
-                        const hall = halls.find((h) => h.id === st.hallId);
-                        const tenant = tenants.find((t) => t.id === st.tenantId);
+                      {groupedMovieSessions.map((session) => {
+                        const { primaryShowtime: st, screens: sessionScreens, hall, tenant } = session;
+                        const isSharedHall = sessionScreens.length > 1;
 
                         return (
                           <Link
@@ -583,9 +612,14 @@ export const HomePage: React.FC = () => {
                                   {st.startTime}
                                 </span>
                                 <span className="text-xs text-slate-400">• {st.date}</span>
+                                {isSharedHall && (
+                                  <span className="px-1.5 py-0.5 rounded text-[9px] font-extrabold uppercase bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                                    Shared Hall ({sessionScreens.length} Screens)
+                                  </span>
+                                )}
                               </div>
-                              <p className="text-[11px] text-slate-400 truncate max-w-[180px] sm:max-w-[220px]">
-                                <span className="text-teal-400 font-bold">{tenant?.branding.island}:</span> {tenant?.name} ({screen?.screenName})
+                              <p className="text-[11px] text-slate-400 truncate max-w-[180px] sm:max-w-[240px]">
+                                <span className="text-teal-400 font-bold">{tenant?.branding.island}:</span> {tenant?.name} ({isSharedHall ? hall?.name : (sessionScreens[0]?.screenName || hall?.name)})
                               </p>
                             </div>
 
@@ -601,7 +635,7 @@ export const HomePage: React.FC = () => {
                         );
                       })}
 
-                      {movieShowtimes.length === 0 && (
+                      {groupedMovieSessions.length === 0 && (
                         <p className="text-xs text-slate-500 py-2">
                           No upcoming public showtimes in this selection.
                         </p>
