@@ -161,6 +161,7 @@ export interface BookedSeat {
   label: string;
   type: SeatType;
   price: number;
+  screenId?: string;
 }
 
 export interface Booking {

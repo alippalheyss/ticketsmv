@@ -1134,13 +1134,46 @@ class MaldivianCinemaStore {
     return this.getBookings().find((b) => b.bookingRef.toUpperCase() === ref.trim().toUpperCase());
   }
 
-  public getBookedSeatIds(showtimeId: string): Set<string> {
+  public getBookedSeatIds(showtimeId: string, screenId?: string): Set<string> {
     const list = this.getBookings().filter((b) => b.showtimeId === showtimeId && b.paymentStatus !== 'expired');
     const set = new Set<string>();
     list.forEach((b) => {
-      b.seats.forEach((s) => set.add(s.seatId));
+      b.seats.forEach((s) => {
+        if (!screenId || !s.screenId || s.screenId === screenId) {
+          set.add(s.seatId);
+        }
+      });
     });
     return set;
+  }
+
+  public getOrCreateShowtimeForScreen(screenId: string, baseShowtime: Showtime): Showtime {
+    const list = this.getShowtimes();
+    const existing = list.find((st) => 
+      st.screenId === screenId && 
+      st.date === baseShowtime.date && 
+      st.movieId === baseShowtime.movieId
+    );
+    if (existing) return existing;
+
+    const targetScreen = this.getScreenById(screenId);
+    const newShow: Showtime = {
+      id: `show-${Date.now()}-${Math.floor(100 + Math.random() * 899)}`,
+      movieId: baseShowtime.movieId,
+      screenId: screenId,
+      hallId: targetScreen ? targetScreen.hallId : baseShowtime.hallId,
+      tenantId: baseShowtime.tenantId,
+      date: baseShowtime.date,
+      startTime: baseShowtime.startTime,
+      endTime: baseShowtime.endTime,
+      priceTiers: { ...baseShowtime.priceTiers },
+      status: baseShowtime.status
+    };
+
+    list.push(newShow);
+    this.persist(STORAGE_KEYS.SHOWTIMES, JSON.stringify(list));
+    this.broadcastSync();
+    return newShow;
   }
 
   /**

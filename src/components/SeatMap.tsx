@@ -31,7 +31,7 @@ export const SeatMap: React.FC<SeatMapProps> = ({
 
   // Load booked seats and active holds
   const refreshSeatStates = useCallback(() => {
-    const booked = cinemaStore.getBookedSeatIds(showtime.id);
+    const booked = cinemaStore.getBookedSeatIds(showtime.id, screen.id);
     setBookedSeatIds(booked);
 
     const holds = cinemaStore.getSeatHolds(showtime.id);
@@ -56,7 +56,7 @@ export const SeatMap: React.FC<SeatMapProps> = ({
     } else if (selectedSeatIds.length === 0) {
       setRemainingTimeSec(null);
     }
-  }, [showtime.id, sessionId, selectedSeatIds.length]);
+  }, [showtime.id, screen.id, sessionId, selectedSeatIds.length]);
 
   // Subscribe to store updates (multi-tab synchronized)
   useEffect(() => {
@@ -128,6 +128,7 @@ export const SeatMap: React.FC<SeatMapProps> = ({
           label: found.id,
           type: found.type,
           price: getSeatPrice(found),
+          screenId: screen.id,
         };
       });
       onSeatSelectionChange(mapped);
@@ -162,6 +163,7 @@ export const SeatMap: React.FC<SeatMapProps> = ({
           label: found.id,
           type: found.type,
           price: getSeatPrice(found),
+          screenId: screen.id,
         };
       });
       onSeatSelectionChange(mapped);

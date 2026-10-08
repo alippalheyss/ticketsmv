@@ -9,7 +9,7 @@ import {
   Building2, Film, Calendar, Users, Sliders, ExternalLink, Plus, Edit3, 
   Download, DollarSign, Upload, MapPin, Check, Ban, Trash2, LayoutGrid, 
   CreditCard, Sparkles, AlertCircle, AlertTriangle, Copy, Image, Play, CheckCircle2, X, LogOut, Lock, KeyRound,
-  Globe, RefreshCw, Save, Send
+  Globe, RefreshCw, Save, Send, ZoomIn, ZoomOut, Maximize2, Eye
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -126,6 +126,10 @@ export const TenantAdminPage: React.FC = () => {
   const [upgradeSlipUrl, setUpgradeSlipUrl] = useState('');
   const [upgradeNotes, setUpgradeNotes] = useState('');
   const [isSubmittingUpgrade, setIsSubmittingUpgrade] = useState(false);
+
+  // Full-Screen Transfer Slip Lightbox Modal State
+  const [selectedSlipBooking, setSelectedSlipBooking] = useState<Booking | null>(null);
+  const [slipZoom, setSlipZoom] = useState<number>(1);
 
   // Additional Cinema Slots & Chain Expansion Form
   const [showBuySlotModal, setShowBuySlotModal] = useState(false);
@@ -531,6 +535,35 @@ export const TenantAdminPage: React.FC = () => {
   const handleCreateShowtime = (e: React.FormEvent) => {
     e.preventDefault();
     if (!currentTenant || !newShowMovieId || !newShowScreenId) return;
+
+    // Handle "All Screens in Hall" bulk scheduling
+    if (newShowScreenId.startsWith('all_in_hall_')) {
+      const hallId = newShowScreenId.replace('all_in_hall_', '');
+      const hallScreens = screens.filter(s => s.hallId === hallId);
+      hallScreens.forEach((scr, idx) => {
+        const newShow: Showtime = {
+          id: `show-${Date.now()}-${idx}`,
+          movieId: newShowMovieId,
+          screenId: scr.id,
+          hallId: scr.hallId,
+          tenantId: currentTenant.id,
+          date: newShowDate,
+          startTime: newShowTime,
+          endTime: '22:45',
+          priceTiers: {
+            standard: newShowStandardPrice,
+            vip: newShowVipPrice,
+            couple: newShowStandardPrice * 2.2,
+            accessible: newShowStandardPrice * 0.8,
+          },
+          status: 'scheduled'
+        };
+        cinemaStore.saveShowtime(newShow);
+      });
+      setShowAddShowtimeModal(false);
+      refreshData();
+      return;
+    }
 
     const targetScreen = screens.find((s) => s.id === newShowScreenId);
     if (!targetScreen) return;
@@ -2124,6 +2157,7 @@ export const TenantAdminPage: React.FC = () => {
                   <th className="px-4 py-3">Seats</th>
                   <th className="px-4 py-3">Amount</th>
                   <th className="px-4 py-3">Payment</th>
+                  <th className="px-4 py-3">Receipt Slip</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
@@ -2135,6 +2169,20 @@ export const TenantAdminPage: React.FC = () => {
                     <td className="px-4 py-3">{b.seats.map(s => s.label).join(', ')}</td>
                     <td className="px-4 py-3 font-bold">{formatCurrency(b.totalAmount)}</td>
                     <td className="px-4 py-3 font-semibold text-emerald-400">{b.paymentStatus}</td>
+                    <td className="px-4 py-3">
+                      {b.slipUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => { setSelectedSlipBooking(b); setSlipZoom(1); }}
+                          className="px-2.5 py-1 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/30 text-teal-300 font-bold text-[11px] flex items-center space-x-1 transition"
+                        >
+                          <Eye className="w-3 h-3 text-teal-400" />
+                          <span>View Slip</span>
+                        </button>
+                      ) : (
+                        <span className="text-slate-600 text-[11px] italic">None</span>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -2146,29 +2194,102 @@ export const TenantAdminPage: React.FC = () => {
       {/* TAB 6: BANK TRANSFER SLIPS */}
       {activeTab === 'slips' && (
         <div className="space-y-6">
-          <h2 className="text-lg font-bold text-white">Bank Transfer Slips Pending Approval</h2>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+            <div>
+              <h2 className="text-lg font-bold text-white">Bank Transfer Slips Inspection & Approval</h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Review guest BML/MIB transfer receipts in full resolution, inspect transaction references, and approve tickets.
+              </p>
+            </div>
+            <span className="px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold self-start sm:self-auto">
+              {bookings.filter(b => b.paymentStatus === 'pending_verification').length} Pending Slips
+            </span>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {bookings.filter(b => b.paymentMethod === 'bml_transfer').map((b) => (
+            {bookings.filter(b => b.paymentMethod === 'bml_transfer' || Boolean(b.slipUrl)).map((b) => (
               <div key={b.id} className="glass-panel rounded-2xl p-4 border border-slate-800 space-y-3">
-                <div className="flex justify-between">
+                <div className="flex justify-between items-center">
                   <span className="font-mono font-bold text-amber-400">{b.bookingRef}</span>
-                  <span className="font-bold text-white">{b.guestName}</span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                    b.paymentStatus === 'paid'
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      : b.paymentStatus === 'pending_verification'
+                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                      : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                  }`}>
+                    {b.paymentStatus}
+                  </span>
                 </div>
-                <p className="text-xs text-slate-300">Amount: {formatCurrency(b.totalAmount)}</p>
-                {b.slipUrl && (
-                  <img src={b.slipUrl} alt="Slip" className="w-full h-40 object-cover rounded-xl border border-slate-700" />
-                )}
-                {b.paymentStatus === 'pending_verification' && (
-                  <div className="flex space-x-2 pt-2">
+
+                <div className="text-xs space-y-1">
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Guest:</span>
+                    <span className="font-bold text-white">{b.guestName} ({b.guestPhone})</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Seats:</span>
+                    <span className="font-mono text-teal-300">{b.seats.map(s => s.label).join(', ')}</span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Total Amount:</span>
+                    <span className="font-mono font-bold text-teal-400">{formatCurrency(b.totalAmount)}</span>
+                  </div>
+                </div>
+
+                {b.slipUrl ? (
+                  <div className="space-y-2">
+                    <div 
+                      className="relative group cursor-pointer bg-slate-950/90 rounded-xl overflow-hidden border border-slate-700/80 p-2 flex items-center justify-center min-h-[160px] max-h-[220px]"
+                      onClick={() => { setSelectedSlipBooking(b); setSlipZoom(1); }}
+                    >
+                      <img 
+                        src={b.slipUrl} 
+                        alt={`Transfer Slip for ${b.bookingRef}`} 
+                        className="max-h-48 w-auto object-contain rounded-lg group-hover:scale-105 transition duration-300" 
+                      />
+                      <div className="absolute inset-0 bg-slate-950/70 opacity-0 group-hover:opacity-100 transition rounded-xl flex items-center justify-center backdrop-blur-sm">
+                        <span className="px-3 py-1.5 rounded-xl bg-teal-500 text-slate-950 font-bold text-xs flex items-center space-x-1.5 shadow-lg">
+                          <Eye className="w-3.5 h-3.5" />
+                          <span>Click to View Full Slip (ބޮޑުކޮށް ބައްލަވާ)</span>
+                        </span>
+                      </div>
+                    </div>
+
                     <button
-                      onClick={() => cinemaStore.updateBookingPaymentStatus(b.id, 'paid')}
-                      className="flex-1 py-2 rounded-xl bg-emerald-500 text-slate-950 font-bold text-xs"
+                      type="button"
+                      onClick={() => { setSelectedSlipBooking(b); setSlipZoom(1); }}
+                      className="w-full py-2 px-3 rounded-xl bg-slate-800 hover:bg-slate-700 text-teal-300 text-xs font-bold border border-teal-500/30 transition flex items-center justify-center space-x-1.5"
+                    >
+                      <Maximize2 className="w-3.5 h-3.5 text-teal-400" />
+                      <span>View & Inspect Full Slip</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl bg-slate-900 border border-slate-800 text-center text-xs text-slate-500">
+                    No receipt slip uploaded
+                  </div>
+                )}
+
+                {b.paymentStatus === 'pending_verification' && (
+                  <div className="flex space-x-2 pt-2 border-t border-slate-800">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        cinemaStore.updateBookingPaymentStatus(b.id, 'paid');
+                        refreshData();
+                      }}
+                      className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-md transition"
                     >
                       Approve Slip
                     </button>
                     <button
-                      onClick={() => cinemaStore.updateBookingPaymentStatus(b.id, 'expired')}
-                      className="px-3 py-2 rounded-xl bg-slate-800 text-rose-400 text-xs"
+                      type="button"
+                      onClick={() => {
+                        cinemaStore.updateBookingPaymentStatus(b.id, 'expired');
+                        refreshData();
+                      }}
+                      className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-rose-950/40 text-rose-400 hover:text-rose-300 font-bold text-xs border border-rose-500/30 transition"
                     >
                       Reject
                     </button>
@@ -2646,11 +2767,23 @@ export const TenantAdminPage: React.FC = () => {
                 onChange={(e) => setNewShowScreenId(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm"
               >
-                {screens.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.screenName} ({halls.find(h => h.id === s.hallId)?.name})
-                  </option>
-                ))}
+                {halls.map((h) => {
+                  const hScreens = screens.filter((s) => s.hallId === h.id);
+                  return (
+                    <optgroup key={h.id} label={`${h.name} (${hScreens.length} Screen${hScreens.length > 1 ? 's' : ''})`}>
+                      {hScreens.length > 1 && (
+                        <option value={`all_in_hall_${h.id}`}>
+                          ★ Schedule for ALL {hScreens.length} Screens in {h.name} (Shared Room)
+                        </option>
+                      )}
+                      {hScreens.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.screenName} ({s.positionInHall ? `${s.positionInHall} Section` : 'Screen'})
+                        </option>
+                      ))}
+                    </optgroup>
+                  );
+                })}
               </select>
             </div>
             <div className="grid grid-cols-2 gap-3">
@@ -3034,6 +3167,152 @@ export const TenantAdminPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: TRANSFER SLIP FULL-RESOLUTION LIGHTBOX INSPECTOR */}
+      {selectedSlipBooking && selectedSlipBooking.slipUrl && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-3 sm:p-6 backdrop-blur-md overflow-y-auto"
+          onClick={() => setSelectedSlipBooking(null)}
+        >
+          <div 
+            className="bg-slate-900 border border-slate-700 rounded-3xl max-w-4xl w-full p-4 sm:p-6 space-y-4 shadow-2xl relative my-auto"
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="space-y-0.5">
+                <div className="flex items-center space-x-2">
+                  <span className="font-mono font-bold text-amber-400 text-base">
+                    {selectedSlipBooking.bookingRef}
+                  </span>
+                  <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider ${
+                    selectedSlipBooking.paymentStatus === 'paid'
+                      ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                      : selectedSlipBooking.paymentStatus === 'pending_verification'
+                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                      : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                  }`}>
+                    {selectedSlipBooking.paymentStatus}
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300">
+                  Guest: <strong className="text-white">{selectedSlipBooking.guestName}</strong> ({selectedSlipBooking.guestPhone}) • Amount: <strong className="text-teal-400 font-mono">{formatCurrency(selectedSlipBooking.totalAmount)}</strong>
+                </p>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedSlipBooking(null)}
+                  className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
+                  title="Close Inspector"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* Toolbar: Zoom Controls & Download */}
+            <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/80 p-2.5 rounded-xl border border-slate-800">
+              <div className="flex items-center space-x-2">
+                <button
+                  type="button"
+                  onClick={() => setSlipZoom(prev => Math.min(3, prev + 0.25))}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center space-x-1"
+                  title="Zoom In"
+                >
+                  <ZoomIn className="w-4 h-4 text-teal-400" />
+                  <span>Zoom In</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSlipZoom(prev => Math.max(0.5, prev - 0.25))}
+                  className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold flex items-center space-x-1"
+                  title="Zoom Out"
+                >
+                  <ZoomOut className="w-4 h-4 text-cyan-400" />
+                  <span>Zoom Out</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setSlipZoom(1)}
+                  className="px-2 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs"
+                >
+                  {Math.round(slipZoom * 100)}% (Reset)
+                </button>
+              </div>
+
+              <div className="flex items-center space-x-2">
+                <a
+                  href={selectedSlipBooking.slipUrl}
+                  download={`slip_${selectedSlipBooking.bookingRef}.png`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-teal-300 border border-teal-500/30 text-xs font-bold flex items-center space-x-1.5 transition"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  <span>Download Slip</span>
+                </a>
+                <a
+                  href={selectedSlipBooking.slipUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold flex items-center space-x-1.5 transition"
+                >
+                  <ExternalLink className="w-3.5 h-3.5" />
+                  <span>Open Full Window</span>
+                </a>
+              </div>
+            </div>
+
+            {/* Slip Image Viewport */}
+            <div className="relative rounded-2xl bg-black/60 border border-slate-800 overflow-auto max-h-[60vh] min-h-[300px] flex items-center justify-center p-4">
+              <img
+                src={selectedSlipBooking.slipUrl}
+                alt="Bank Transfer Slip"
+                style={{ transform: `scale(${slipZoom})`, transformOrigin: 'center center' }}
+                className="max-h-[55vh] w-auto object-contain transition-transform duration-200 select-none shadow-2xl rounded-lg"
+              />
+            </div>
+
+            {/* Bottom Actions: Approve / Reject */}
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 pt-2">
+              <div className="text-xs text-slate-400">
+                Seats Booked: <span className="font-bold text-white">{selectedSlipBooking.seats.map(s => s.label).join(', ')}</span>
+              </div>
+
+              {selectedSlipBooking.paymentStatus === 'pending_verification' && (
+                <div className="flex items-center space-x-3 w-full sm:w-auto">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      cinemaStore.updateBookingPaymentStatus(selectedSlipBooking.id, 'paid');
+                      setSelectedSlipBooking(prev => prev ? { ...prev, paymentStatus: 'paid' } : null);
+                      refreshData();
+                    }}
+                    className="flex-1 sm:flex-none px-6 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition flex items-center justify-center space-x-2"
+                  >
+                    <Check className="w-4 h-4" />
+                    <span>Approve & Mark Paid</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      cinemaStore.updateBookingPaymentStatus(selectedSlipBooking.id, 'expired');
+                      setSelectedSlipBooking(prev => prev ? { ...prev, paymentStatus: 'expired' } : null);
+                      refreshData();
+                    }}
+                    className="flex-1 sm:flex-none px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-rose-950/40 text-rose-400 hover:text-rose-300 font-bold text-xs border border-rose-500/30 transition flex items-center justify-center space-x-2"
+                  >
+                    <Ban className="w-4 h-4" />
+                    <span>Reject Slip</span>
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

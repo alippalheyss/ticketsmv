@@ -103,19 +103,31 @@ export const BookingPage: React.FC = () => {
     return posA - posB;
   });
 
-  // Switch screens to book seats seamlessly
+  // Switch screens to book seats seamlessly without seat cross-contamination
   const handleSwitchToScreen = (targetScreen: Screen) => {
     if (targetScreen.id === screen.id) return;
     setSelectedSeats([]);
 
-    const otherShow = hallShowtimes.find(
-      (st) => st.screenId === targetScreen.id && st.date === showtime.date
+    // 1. Look for existing showtime on targetScreen for this movie and date
+    let targetShow = hallShowtimes.find(
+      (st) => st.screenId === targetScreen.id && st.date === showtime.date && st.movieId === showtime.movieId
     );
 
-    if (otherShow) {
-      navigate(`/book/${otherShow.id}`);
-    } else {
-      setScreen(targetScreen);
+    // 2. If not found, look for any showtime on targetScreen on that date
+    if (!targetShow) {
+      targetShow = hallShowtimes.find(
+        (st) => st.screenId === targetScreen.id && st.date === showtime.date
+      );
+    }
+
+    // 3. If targetScreen has no scheduled slot yet, auto-provision a dedicated showtime for this screen
+    if (!targetShow) {
+      targetShow = cinemaStore.getOrCreateShowtimeForScreen(targetScreen.id, showtime);
+      setHallShowtimes(cinemaStore.getShowtimes(showtime.tenantId));
+    }
+
+    if (targetShow) {
+      navigate(`/book/${targetShow.id}`);
     }
   };
 

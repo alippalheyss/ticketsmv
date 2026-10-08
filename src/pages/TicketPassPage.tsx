@@ -6,8 +6,11 @@ import { Booking, Showtime, Screen, Movie, Hall, Tenant } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { 
   CheckCircle2, Download, Calendar, Printer, Mail, Share2, 
-  Sparkles, MapPin, Clock, Ticket, ShieldCheck, ExternalLink, ArrowLeft 
+  Sparkles, MapPin, Clock, Ticket, ShieldCheck, ExternalLink, ArrowLeft,
+  FileText, Loader2
 } from 'lucide-react';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 
 export const TicketPassPage: React.FC = () => {
   const { bookingRef } = useParams<{ bookingRef: string }>();
@@ -23,6 +26,8 @@ export const TicketPassPage: React.FC = () => {
 
   const [qrDataUrl, setQrDataUrl] = useState<string>('');
   const [showEmailModal, setShowEmailModal] = useState(false);
+  const [isDownloadingImage, setIsDownloadingImage] = useState(false);
+  const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
 
   useEffect(() => {
     if (!bookingRef) return;
@@ -104,6 +109,71 @@ END:VCALENDAR`;
     window.print();
   };
 
+  // Download Ticket as PNG Image
+  const downloadTicketImage = async () => {
+    const el = document.getElementById('ticket-pass-element');
+    if (!el || !booking) return;
+    setIsDownloadingImage(true);
+    try {
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#0f172a',
+        logging: false
+      });
+      const dataUrl = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = dataUrl;
+      link.download = `ticket_${booking.bookingRef}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    } catch (err) {
+      console.error('Failed to export ticket as image:', err);
+      window.print();
+    } finally {
+      setIsDownloadingImage(false);
+    }
+  };
+
+  // Download Ticket as PDF Document
+  const downloadTicketPdf = async () => {
+    const el = document.getElementById('ticket-pass-element');
+    if (!el || !booking) return;
+    setIsDownloadingPdf(true);
+    try {
+      const canvas = await html2canvas(el, {
+        scale: 2,
+        useCORS: true,
+        allowTaint: true,
+        backgroundColor: '#0f172a',
+        logging: false
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF({
+        orientation: 'portrait',
+        unit: 'mm',
+        format: 'a4'
+      });
+
+      const pdfWidth = pdf.internal.pageSize.getWidth();
+      const pdfHeight = pdf.internal.pageSize.getHeight();
+      const imgWidth = pdfWidth - 20; // 10mm margins
+      const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+      pdf.setFillColor(15, 23, 42);
+      pdf.rect(0, 0, pdfWidth, pdfHeight, 'F');
+      pdf.addImage(imgData, 'PNG', 10, 15, imgWidth, Math.min(imgHeight, pdfHeight - 30));
+      pdf.save(`ticket_${booking.bookingRef}.pdf`);
+    } catch (err) {
+      console.error('Failed to export ticket as PDF:', err);
+      window.print();
+    } finally {
+      setIsDownloadingPdf(false);
+    }
+  };
+
   const isPendingTransfer = booking.paymentStatus === 'pending_verification';
 
   return (
@@ -118,22 +188,42 @@ END:VCALENDAR`;
           <span>Back to Home</span>
         </Link>
 
-        <div className="flex items-center space-x-2">
+        <div className="flex flex-wrap items-center gap-2">
+          <button
+            onClick={downloadTicketImage}
+            disabled={isDownloadingImage}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-300 text-xs font-semibold border border-amber-500/40 transition disabled:opacity-50"
+            title="Download Ticket as PNG Image"
+          >
+            {isDownloadingImage ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Download className="w-3.5 h-3.5 text-amber-400" />}
+            <span>{isDownloadingImage ? 'Exporting...' : 'Save Image'}</span>
+          </button>
+
+          <button
+            onClick={downloadTicketPdf}
+            disabled={isDownloadingPdf}
+            className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 text-xs font-semibold border border-teal-500/40 transition disabled:opacity-50"
+            title="Download Ticket as PDF Document"
+          >
+            {isDownloadingPdf ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <FileText className="w-3.5 h-3.5 text-teal-400" />}
+            <span>{isDownloadingPdf ? 'Exporting...' : 'Save PDF'}</span>
+          </button>
+
           <button
             onClick={() => setShowEmailModal(true)}
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
             title="Preview Sent Email"
           >
             <Mail className="w-3.5 h-3.5 text-sky-400" />
-            <span>View Ticket Email</span>
+            <span>Email</span>
           </button>
 
           <button
             onClick={handlePrint}
             className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
           >
-            <Printer className="w-3.5 h-3.5 text-teal-400" />
-            <span>Print Pass</span>
+            <Printer className="w-3.5 h-3.5 text-slate-400" />
+            <span>Print</span>
           </button>
         </div>
       </div>
@@ -163,8 +253,8 @@ END:VCALENDAR`;
         )}
       </div>
 
-      {/* Digital Pass Ticket Card (Optimized for Screen & Print) */}
-      <div className="relative rounded-3xl overflow-hidden shadow-2xl bg-[#0f172a] border border-slate-700 ticket-print-card">
+      {/* Digital Pass Ticket Card (Optimized for Screen, Print, Image & PDF export) */}
+      <div id="ticket-pass-element" className="relative rounded-3xl overflow-hidden shadow-2xl bg-[#0f172a] border border-slate-700 ticket-print-card">
         {/* Cinema Header */}
         <div className="bg-gradient-to-r from-teal-900/60 via-slate-900 to-cyan-900/60 p-6 border-b border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center space-x-3">
@@ -289,23 +379,45 @@ END:VCALENDAR`;
         </div>
       </div>
 
-      {/* Action Buttons: Book Another & Add to Calendar */}
-      <div className="no-print grid grid-cols-1 sm:grid-cols-2 gap-4">
-        <button
-          onClick={() => navigate('/')}
-          className="flex items-center justify-center space-x-2 py-3.5 rounded-2xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold shadow-lg shadow-teal-500/25 transition active:scale-95"
-        >
-          <Ticket className="w-4 h-4" />
-          <span>{t('ticket.addToWallet')}</span>
-        </button>
+      {/* Action Buttons: Download as Image / PDF & Calendar */}
+      <div className="no-print space-y-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button
+            onClick={downloadTicketImage}
+            disabled={isDownloadingImage}
+            className="flex items-center justify-center space-x-2 py-3.5 px-4 rounded-2xl bg-amber-500 hover:bg-amber-400 text-slate-950 text-xs font-bold shadow-lg shadow-amber-500/20 transition active:scale-95 disabled:opacity-50"
+          >
+            {isDownloadingImage ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+            <span>{isDownloadingImage ? 'Generating Image...' : 'Download Ticket Image (PNG)'}</span>
+          </button>
 
-        <button
-          onClick={downloadIcsCalendar}
-          className="flex items-center justify-center space-x-2 py-3.5 rounded-2xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold shadow-lg shadow-teal-500/20 transition"
-        >
-          <Calendar className="w-4 h-4" />
-          <span>{t('ticket.addToCalendar')}</span>
-        </button>
+          <button
+            onClick={downloadTicketPdf}
+            disabled={isDownloadingPdf}
+            className="flex items-center justify-center space-x-2 py-3.5 px-4 rounded-2xl bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-slate-950 text-xs font-bold shadow-lg shadow-teal-500/20 transition active:scale-95 disabled:opacity-50"
+          >
+            {isDownloadingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <FileText className="w-4 h-4" />}
+            <span>{isDownloadingPdf ? 'Generating PDF...' : 'Download Ticket (PDF)'}</span>
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <button
+            onClick={() => navigate('/')}
+            className="flex items-center justify-center space-x-2 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold border border-slate-800 transition"
+          >
+            <Ticket className="w-4 h-4 text-teal-400" />
+            <span>Book Another Movie</span>
+          </button>
+
+          <button
+            onClick={downloadIcsCalendar}
+            className="flex items-center justify-center space-x-2 py-3 rounded-xl bg-slate-900 hover:bg-slate-800 text-slate-300 text-xs font-semibold border border-slate-800 transition"
+          >
+            <Calendar className="w-4 h-4 text-cyan-400" />
+            <span>Add to Calendar (.ics)</span>
+          </button>
+        </div>
       </div>
 
       {/* Modal: Transactional Email Viewer */}
