@@ -1226,7 +1226,7 @@ class MaldivianCinemaStore {
     }
   }
 
-  public validateTicket(qrCodeOrRef: string): { 
+  public validateTicket(qrCodeOrRef: string, tenantId?: string): { 
     valid: boolean; 
     alreadyCheckedIn: boolean; 
     booking?: Booking; 
@@ -1241,6 +1241,16 @@ class MaldivianCinemaStore {
         valid: false,
         alreadyCheckedIn: false,
         message: 'Invalid ticket. QR code or Booking Reference does not exist in the system.'
+      };
+    }
+
+    if (tenantId && booking.tenantId !== tenantId) {
+      const otherTenant = this.getTenants().find((t) => t.id === booking.tenantId);
+      return {
+        valid: false,
+        alreadyCheckedIn: false,
+        booking,
+        message: `Wrong Cinema! This ticket is for "${otherTenant?.name || 'another cinema'}", not for this venue.`
       };
     }
 

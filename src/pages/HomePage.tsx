@@ -85,17 +85,9 @@ export const HomePage: React.FC = () => {
     )
   ).sort();
 
-  // Cascading Islands: if an Atoll is chosen, show ALL islands in that atoll from maldivesLocations dataset.
-  // If 'all' atolls is chosen, show all islands where active cinemas exist (or all major cities)
+  // Cascading Islands: User must select an Atoll first before islands are visible/selectable
   const availableIslands = selectedAtoll === 'all'
-    ? Array.from(
-        new Set([
-          ...tenants
-            .map((t) => t.branding.island)
-            .filter((island): island is string => Boolean(island && island.trim())),
-          'Malé City', 'Hulhumalé', 'Vilimalé', 'Kulhudhuffushi City', 'Fuvahmulah City', 'Addu City'
-        ])
-      ).sort()
+    ? []
     : getIslandsByAtoll(selectedAtoll);
 
   const handleAtollChange = (atoll: string) => {
@@ -321,22 +313,37 @@ export const HomePage: React.FC = () => {
                 <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
               </div>
 
-              {/* 2. Island Selector Dropdown */}
+              {/* 2. Island Selector Dropdown - Requires Atoll First */}
               <div className="relative w-full sm:w-auto">
-                <MapPin className="w-4 h-4 text-cyan-400 absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10" />
+                <MapPin className={`w-4 h-4 ${selectedAtoll === 'all' ? 'text-slate-500' : 'text-cyan-400'} absolute left-3 top-1/2 -translate-y-1/2 pointer-events-none z-10`} />
                 <select
                   value={selectedIsland}
+                  disabled={selectedAtoll === 'all'}
                   onChange={(e) => setSelectedIsland(e.target.value)}
-                  className="w-full sm:w-auto appearance-none pl-9 pr-9 py-2.5 rounded-xl bg-slate-900/90 text-xs font-bold text-cyan-300 border border-slate-700/80 shadow-inner focus:outline-none focus:ring-1 focus:ring-cyan-400 focus:border-cyan-400 cursor-pointer transition hover:border-slate-600"
+                  className={`w-full sm:w-auto appearance-none pl-9 pr-9 py-2.5 rounded-xl text-xs font-bold shadow-inner focus:outline-none transition ${
+                    selectedAtoll === 'all'
+                      ? 'bg-slate-900/40 text-slate-500 border border-slate-800/80 cursor-not-allowed opacity-70'
+                      : 'bg-slate-900/90 text-cyan-300 border border-slate-700/80 focus:ring-1 focus:ring-cyan-400 focus:border-cyan-400 cursor-pointer hover:border-slate-600'
+                  }`}
                 >
-                  <option value="all" className="bg-slate-900 text-slate-200">All Islands (ހުރިހާ ރަށް)</option>
-                  {availableIslands.map((isle) => (
-                    <option key={isle} value={isle} className="bg-slate-900 text-slate-200">
-                      {isle}
+                  {selectedAtoll === 'all' ? (
+                    <option value="all" className="bg-slate-900 text-slate-500">
+                      Choose Atoll First (ފުރަތަމަ އަތޮޅު ހިޔާރުކުރައްވާ)
                     </option>
-                  ))}
+                  ) : (
+                    <>
+                      <option value="all" className="bg-slate-900 text-slate-200">
+                        All Islands in {selectedAtoll} (ހުރިހާ ރަށް)
+                      </option>
+                      {availableIslands.map((isle) => (
+                        <option key={isle} value={isle} className="bg-slate-900 text-slate-200">
+                          {isle}
+                        </option>
+                      ))}
+                    </>
+                  )}
                 </select>
-                <ChevronDown className="w-3.5 h-3.5 text-slate-400 absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none" />
+                <ChevronDown className={`w-3.5 h-3.5 ${selectedAtoll === 'all' ? 'text-slate-600' : 'text-slate-400'} absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none`} />
               </div>
             </div>
 
@@ -374,38 +381,45 @@ export const HomePage: React.FC = () => {
                 ))}
               </div>
 
-              {/* Island quick selection */}
-              <div className="flex flex-wrap items-center justify-center gap-1.5 text-xs">
-                <span className="text-[11px] font-bold text-slate-400 mr-1 flex items-center">
-                  <MapPin className="w-3.5 h-3.5 mr-1 text-cyan-400 inline" />
-                  Island:
-                </span>
-                <button
-                  onClick={() => setSelectedIsland('all')}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition flex items-center space-x-1 ${
-                    selectedIsland === 'all'
-                      ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
-                      : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'
-                  }`}
-                >
-                  <MapPin className="w-3 h-3" />
-                  <span>All Islands</span>
-                </button>
-                {availableIslands.map((isle) => (
+              {/* Island quick selection: only shown after choosing an atoll */}
+              {selectedAtoll === 'all' ? (
+                <div className="text-[11px] text-slate-500 flex items-center justify-center space-x-1.5 py-0.5">
+                  <MapPin className="w-3.5 h-3.5 text-slate-500" />
+                  <span>Choose an atoll above to view islands (ރަށްތައް ފެންނާނީ ފުރަތަމަ އަތޮޅެއް ހިޔާރުކުރުމުން)</span>
+                </div>
+              ) : (
+                <div className="flex flex-wrap items-center justify-center gap-1.5 text-xs animate-fade-in">
+                  <span className="text-[11px] font-bold text-slate-400 mr-1 flex items-center">
+                    <MapPin className="w-3.5 h-3.5 mr-1 text-cyan-400 inline" />
+                    Island ({selectedAtoll}):
+                  </span>
                   <button
-                    key={isle}
-                    onClick={() => setSelectedIsland(isle)}
+                    onClick={() => setSelectedIsland('all')}
                     className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition flex items-center space-x-1 ${
-                      selectedIsland === isle
+                      selectedIsland === 'all'
                         ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
                         : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'
                     }`}
                   >
                     <MapPin className="w-3 h-3" />
-                    <span>{isle}</span>
+                    <span>All Islands in Atoll</span>
                   </button>
-                ))}
-              </div>
+                  {availableIslands.map((isle) => (
+                    <button
+                      key={isle}
+                      onClick={() => setSelectedIsland(isle)}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-semibold transition flex items-center space-x-1 ${
+                        selectedIsland === isle
+                          ? 'bg-cyan-500 text-slate-950 font-bold shadow-sm'
+                          : 'bg-slate-900/80 text-slate-400 hover:text-white border border-slate-800'
+                      }`}
+                    >
+                      <MapPin className="w-3 h-3" />
+                      <span>{isle}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -474,20 +488,20 @@ export const HomePage: React.FC = () => {
                   className="glass-panel rounded-2xl overflow-hidden border border-slate-800 hover:border-slate-700 transition flex flex-col justify-between"
                 >
                   <div>
-                    {/* Poster Image & Badges */}
-                    <div className="relative aspect-[16/10] overflow-hidden bg-slate-900">
+                    {/* 1. Panoramic Backdrop Banner & Badges */}
+                    <div className="relative aspect-[16/9] overflow-hidden bg-slate-950">
                       <img
                         src={movie.backdropUrl || movie.posterUrl}
-                        alt={movie.titleEn}
-                        className="w-full h-full object-cover"
+                        alt={`${movie.titleEn} backdrop`}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                       />
-                      <div className="absolute inset-0 bg-gradient-to-t from-[#0a0f1d] via-transparent to-black/30" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-[#0a0f1d] via-[#0a0f1d]/40 to-black/30" />
 
-                      <div className="absolute top-3 left-3 flex flex-wrap gap-1.5">
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-950/80 text-teal-300 border border-teal-500/30">
+                      <div className="absolute top-3 left-3 flex flex-wrap gap-1.5 z-10">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-950/80 text-teal-300 border border-teal-500/30 backdrop-blur-sm">
                           {movie.ageRating}
                         </span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-950/80 text-amber-300 border border-amber-500/30 flex items-center space-x-1">
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-950/80 text-amber-300 border border-amber-500/30 flex items-center space-x-1 backdrop-blur-sm">
                           <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
                           <span>Maldivian Premiere</span>
                         </span>
@@ -496,7 +510,7 @@ export const HomePage: React.FC = () => {
                       {movie.trailerYoutubeUrl && (
                         <button
                           onClick={() => setSelectedMovieForTrailer(movie)}
-                          className="absolute bottom-3 right-3 flex items-center space-x-1 px-2.5 py-1 rounded-full bg-teal-500/90 hover:bg-teal-400 text-slate-950 text-xs font-bold shadow-lg transition"
+                          className="absolute top-3 right-3 flex items-center space-x-1 px-2.5 py-1 rounded-full bg-teal-500/90 hover:bg-teal-400 text-slate-950 text-xs font-bold shadow-lg transition z-10"
                         >
                           <Play className="w-3.5 h-3.5 fill-slate-950" />
                           <span>Trailer</span>
@@ -504,27 +518,42 @@ export const HomePage: React.FC = () => {
                       )}
                     </div>
 
-                    {/* Movie Metadata */}
-                    <div className="p-5 space-y-3">
-                      <div>
-                        <h3 className="font-bold text-lg text-white group-hover:text-teal-300 transition">
-                          {movie.titleEn}
-                        </h3>
-                        <p className="text-xs text-teal-400 font-dhivehi font-bold mt-0.5">
-                          {movie.titleDv}
-                        </p>
+                    {/* 2. Movie Header with Theatrical Vertical Poster & Details */}
+                    <div className="p-5 pt-0 relative space-y-3">
+                      {/* Flex row with vertical poster overlapping backdrop */}
+                      <div className="flex items-start space-x-3.5 -mt-10 sm:-mt-12 relative z-20">
+                        {/* Vertical 2:3 Movie Poster Artwork */}
+                        <div className="relative w-20 sm:w-24 aspect-[2/3] shrink-0 rounded-xl overflow-hidden border-2 border-slate-700/80 shadow-2xl bg-slate-900 group-hover:border-teal-500/60 transition shadow-black/80">
+                          <img
+                            src={movie.posterUrl || movie.backdropUrl}
+                            alt={`${movie.titleEn} poster`}
+                            className="w-full h-full object-cover"
+                            loading="lazy"
+                          />
+                        </div>
+
+                        {/* Title & Key Specs next to poster */}
+                        <div className="flex-1 pt-10 sm:pt-12 min-w-0">
+                          <h3 className="font-bold text-base sm:text-lg text-white group-hover:text-teal-300 transition truncate leading-snug">
+                            {movie.titleEn}
+                          </h3>
+                          <p className="text-xs text-teal-400 font-dhivehi font-bold mt-0.5 truncate">
+                            {movie.titleDv}
+                          </p>
+
+                          <div className="flex flex-wrap items-center gap-1.5 text-[11px] text-slate-400 mt-1.5">
+                            <span className="flex items-center space-x-1 text-slate-300">
+                              <Clock className="w-3 h-3 text-teal-400" />
+                              <span>{movie.durationMinutes}m</span>
+                            </span>
+                            <span>•</span>
+                            <span className="truncate max-w-[130px] text-slate-400">{movie.genre.slice(0, 2).join(', ')}</span>
+                          </div>
+                        </div>
                       </div>
 
-                      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
-                        <span className="flex items-center space-x-1">
-                          <Clock className="w-3.5 h-3.5" />
-                          <span>{movie.durationMinutes} min</span>
-                        </span>
-                        <span>•</span>
-                        <span>{movie.genre.slice(0, 2).join(', ')}</span>
-                      </div>
-
-                      <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed">
+                      {/* Movie Synopsis */}
+                      <p className="text-xs text-slate-400 line-clamp-2 leading-relaxed pt-1">
                         {isDhivehi ? movie.synopsisDv : movie.synopsisEn}
                       </p>
                     </div>

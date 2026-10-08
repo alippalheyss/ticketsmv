@@ -1,17 +1,43 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { Html5Qrcode } from 'html5-qrcode';
 import { cinemaStore } from '../services/store';
-import { Booking, Tenant, Hall } from '../types';
+import { Booking, Tenant } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { 
   QrCode, Camera, CheckCircle2, AlertTriangle, XCircle, Search, 
-  Clock, ShieldCheck, User, Film, MapPin, History, RefreshCw 
+  Clock, ShieldCheck, MapPin, History, Lock, LogOut, KeyRound, 
+  Building2, Sparkles, AlertCircle 
 } from 'lucide-react';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export const ValidatorPage: React.FC = () => {
-  const { t, formatCurrency } = useLanguage();
-  const [tenants, setTenants] = useState<Tenant[]>([]);
-  const [selectedTenantId, setSelectedTenantId] = useState<string>('');
+  const { t } = useLanguage();
+
+  // Authentication State
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
+    return Boolean(sessionStorage.getItem('mv_validator_auth') || sessionStorage.getItem('mv_tenant_auth'));
+  });
+
+  const [currentTenant, setCurrentTenant] = useState<Tenant | null>(() => {
+    try {
+      const saved = sessionStorage.getItem('mv_validator_auth') || sessionStorage.getItem('mv_tenant_auth');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        const list = cinemaStore.getTenants();
+        const found = list.find((x) => x.id === parsed.id || x.ownerEmail === parsed.ownerEmail);
+        if (found && found.status !== 'suspended') return found;
+      }
+    } catch {}
+    return null;
+  });
+
+  // Login form state
+  const [loginCode, setLoginCode] = useState('');
+  const [loginPass, setLoginPass] = useState('');
+  const [loginError, setLoginError] = useState('');
+  const [isLoggingIn, setIsLoggingIn] = useState(false);
+
+  // Scanner state
   const [manualCode, setManualCode] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -34,17 +60,109 @@ export const ValidatorPage: React.FC = () => {
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
 
+  // Sync tenant changes from store
   useEffect(() => {
-    const load = () => {
-      const list = cinemaStore.getTenants();
-      setTenants(list);
-      setSelectedTenantId((cur) => (cur && list.some((x) => x.id === cur) ? cur : (list[0]?.id || '')));
-    };
-    load();
-    return cinemaStore.subscribe(load);
-  }, []);
+    const unsub = cinemaStore.subscribe(() => {
+      if (currentTenant) {
+        const fresh = cinemaStore.getTenants().find((t) => t.id === currentTenant.id);
+        if (fresh) setCurrentTenant(fresh);
+      }
+    });
+    return () => unsub();
+  }, [currentTenant?.id]);
 
-  // Web Audio synth for instant door beep
+  // Handle Staff Login
+  const handleStaffLogin = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setLoginError('');
+
+    const query = loginCode.trim().toLowerCase();
+    if (!query) {
+      setLoginError('Please enter your Cinema Code or Organizer Email');
+      return;
+    }
+
+    if (!loginPass.trim()) {
+      setLoginError('Please enter your password');
+      return;
+    }
+
+    setIsLoggingIn(true);
+    try {
+      const allTenantsList = cinemaStore.getTenants();
+      const found = allTenantsList.find(
+        (t) =>
+          t.tenantCode?.toLowerCase() === query ||
+          t.ownerEmail.toLowerCase() === query ||
+          t.slug.toLowerCase() === query
+      );
+
+      if (!found) {
+        setLoginError(`No registered cinema found for "${loginCode}". Check your cinema code or contact Super Admin.`);
+        setIsLoggingIn(false);
+        return;
+      }
+
+      if (found.status === 'suspended') {
+        setLoginError('This cinema account has been suspended. Please contact the administrator.');
+        setIsLoggingIn(false);
+        return;
+      }
+
+      // Password verification
+      let passOk = false;
+      if (isSupabaseConfigured() && query.includes('@')) {
+        const { error } = await supabase.auth.signInWithPassword({
+          email: query,
+          password: loginPass
+        });
+        if (!error) {
+          passOk = true;
+        }
+      }
+
+      if (!passOk) {
+        if (found.passwordHash) {
+          if (found.passwordHash === loginPass) {
+            passOk = true;
+          }
+        } else {
+          // If no password set yet for this cinema, accept password and save it
+          found.passwordHash = loginPass;
+          cinemaStore.saveTenant(found);
+          passOk = true;
+        }
+      }
+
+      if (!passOk) {
+        setLoginError('Incorrect password. Please verify your credentials.');
+        setIsLoggingIn(false);
+        return;
+      }
+
+      sessionStorage.setItem('mv_validator_auth', JSON.stringify(found));
+      setCurrentTenant(found);
+      setIsAuthenticated(true);
+    } catch (err: any) {
+      setLoginError(err?.message || 'Login failed. Please try again.');
+    } finally {
+      setIsLoggingIn(false);
+    }
+  };
+
+  const handleStaffLogout = () => {
+    sessionStorage.removeItem('mv_validator_auth');
+    sessionStorage.removeItem('mv_tenant_auth');
+    setIsAuthenticated(false);
+    setCurrentTenant(null);
+    setValidationResult(null);
+    if (isScanning && scannerRef.current) {
+      scannerRef.current.stop().catch(() => {});
+      setIsScanning(false);
+    }
+  };
+
+  // Web Audio synth for instant door feedback beep
   const playBeep = (success: boolean) => {
     try {
       const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
@@ -72,8 +190,9 @@ export const ValidatorPage: React.FC = () => {
   };
 
   const handleValidation = (code: string) => {
-    if (!code.trim()) return;
-    const res = cinemaStore.validateTicket(code.trim());
+    if (!code.trim() || !currentTenant) return;
+    // Strictly validate against the currently authenticated cinema to prevent cross-venue validation
+    const res = cinemaStore.validateTicket(code.trim(), currentTenant.id);
     setValidationResult(res);
     playBeep(res.valid);
 
@@ -147,37 +266,134 @@ export const ValidatorPage: React.FC = () => {
     };
   }, []);
 
+  // 1. IF NOT AUTHENTICATED: SHOW DOOR STAFF LOGIN SCREEN
+  if (!isAuthenticated || !currentTenant) {
+    return (
+      <div className="max-w-md mx-auto px-4 py-12">
+        <div className="glass-panel p-8 rounded-3xl border border-slate-800 shadow-2xl relative overflow-hidden">
+          <div className="absolute top-0 right-0 w-36 h-36 bg-amber-500/10 rounded-full blur-2xl pointer-events-none" />
+
+          {/* Icon and Title */}
+          <div className="text-center space-y-3 mb-6">
+            <div className="inline-flex p-3.5 rounded-2xl bg-amber-500/15 border border-amber-500/30 text-amber-400 shadow-lg shadow-amber-500/10">
+              <Lock className="w-8 h-8" />
+            </div>
+            <div>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-300 border border-amber-500/30 inline-block mb-1.5">
+                Staff Authentication Required
+              </span>
+              <h1 className="text-2xl font-bold text-white">Door Staff QR Validator</h1>
+              <p className="text-xs text-slate-400 mt-1">
+                ދޮރުވާނު އަދި ގޭޓްކީޕަރ ލޮގިން: ވަދެވަޑައިގަތުމަށް ސިނަމާ ކޯޑާއި ޕާސްވޯޑް ޖައްސަވާ
+              </p>
+            </div>
+          </div>
+
+          {loginError && (
+            <div className="mb-5 p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/30 text-rose-300 text-xs flex items-start space-x-2">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{loginError}</span>
+            </div>
+          )}
+
+          {/* Login Form */}
+          <form onSubmit={handleStaffLogin} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                Cinema Code or Organizer Email
+              </label>
+              <div className="relative">
+                <Building2 className="w-4 h-4 text-slate-500 absolute left-3 top-3.5" />
+                <input
+                  type="text"
+                  value={loginCode}
+                  onChange={(e) => setLoginCode(e.target.value)}
+                  placeholder="e.g. CIN-MLE-01 or organizer@cinema.mv"
+                  required
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
+                />
+              </div>
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
+                Staff / Organizer Password
+              </label>
+              <div className="relative">
+                <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-3.5" />
+                <input
+                  type="password"
+                  value={loginPass}
+                  onChange={(e) => setLoginPass(e.target.value)}
+                  placeholder="••••••••••••"
+                  required
+                  className="w-full pl-9 pr-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs placeholder:text-slate-500 focus:outline-none focus:border-amber-400"
+                />
+              </div>
+            </div>
+
+            <button
+              type="submit"
+              disabled={isLoggingIn}
+              className="w-full py-3 rounded-xl bg-amber-500 hover:bg-amber-400 text-slate-950 font-bold text-sm shadow-lg shadow-amber-500/20 transition active:scale-95 disabled:opacity-50 flex items-center justify-center space-x-2 mt-2"
+            >
+              {isLoggingIn ? (
+                <span>Authenticating Door Staff...</span>
+              ) : (
+                <>
+                  <ShieldCheck className="w-4 h-4" />
+                  <span>Unlock Gate Scanner</span>
+                </>
+              )}
+            </button>
+          </form>
+
+          <div className="mt-6 pt-4 border-t border-slate-800 text-center">
+            <p className="text-[11px] text-slate-500">
+              Only authorized cinema gatekeepers and managers may validate tickets. Need access? Contact your cinema administrator.
+            </p>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // 2. AUTHENTICATED: RENDER ACTIVE VALIDATOR LOCKED TO CURRENT CINEMA
   return (
     <div className="max-w-4xl mx-auto px-4 py-8">
-      {/* Top Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8">
-        <div>
-          <div className="flex items-center space-x-2">
-            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
-              <QrCode className="w-6 h-6" />
-            </div>
-            <h1 className="text-2xl font-bold text-white">{t('validator.title')}</h1>
+      {/* Top Banner with Authenticated Cinema Lock */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 mb-8 p-4.5 rounded-2xl glass-panel border border-slate-800 shadow-xl">
+        <div className="flex items-center space-x-3.5">
+          <div className="p-3 rounded-xl bg-amber-500/10 text-amber-400 border border-amber-500/20">
+            <QrCode className="w-6 h-6" />
           </div>
-          <p className="text-sm text-slate-400 mt-1">
-            Gatekeeper entrance tool to scan digital tickets and prevent duplicate entry across Maldivian cinema halls.
-          </p>
+          <div>
+            <div className="flex items-center space-x-2 flex-wrap">
+              <h1 className="text-xl font-bold text-white">{currentTenant.name}</h1>
+              <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                {currentTenant.tenantCode}
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 flex items-center space-x-1.5 mt-0.5">
+              <MapPin className="w-3 h-3 text-teal-400" />
+              <span>{currentTenant.branding.island}, {currentTenant.branding.atoll}</span>
+              <span>•</span>
+              <span className="text-emerald-400 flex items-center space-x-1 font-semibold">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block animate-pulse" />
+                <span>Door Gatekeeper Active</span>
+              </span>
+            </p>
+          </div>
         </div>
 
-        {/* Tenant Cinema Selector */}
-        <div className="flex items-center space-x-2">
-          <label className="text-xs font-semibold text-slate-400">Cinema:</label>
-          <select
-            value={selectedTenantId}
-            onChange={(e) => setSelectedTenantId(e.target.value)}
-            className="px-3 py-1.5 rounded-lg bg-slate-800 border border-slate-700 text-sm text-white focus:outline-none focus:border-amber-400"
-          >
-            {tenants.map((t) => (
-              <option key={t.id} value={t.id}>
-                {t.name} ({t.branding.island})
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Exit / Logout Button */}
+        <button
+          onClick={handleStaffLogout}
+          className="flex items-center justify-center space-x-1.5 px-3.5 py-2 rounded-xl bg-slate-850 hover:bg-rose-500/10 border border-slate-700 hover:border-rose-500/30 text-xs font-semibold text-slate-300 hover:text-rose-300 transition"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          <span>Exit Gatekeeper</span>
+        </button>
       </div>
 
       {/* Main Scanner Section */}
@@ -273,13 +489,13 @@ export const ValidatorPage: React.FC = () => {
             <div>
               <h2 className="text-sm font-semibold uppercase tracking-wider text-slate-300 mb-4 flex items-center space-x-2">
                 <ShieldCheck className="w-4 h-4 text-amber-400" />
-                <span>Verification Status</span>
+                <span>Verification Status ({currentTenant.name})</span>
               </h2>
 
               {!validationResult ? (
                 <div className="h-56 flex flex-col items-center justify-center text-center p-6 text-slate-500 border-2 border-dashed border-slate-800 rounded-xl">
                   <QrCode className="w-12 h-12 mb-2 opacity-30" />
-                  <p className="text-xs">Awaiting QR scan or booking reference...</p>
+                  <p className="text-xs">Awaiting QR scan or booking reference for {currentTenant.name}...</p>
                 </div>
               ) : validationResult.valid ? (
                 /* SUCCESSFUL VALIDATION */
@@ -341,11 +557,11 @@ export const ValidatorPage: React.FC = () => {
                   </div>
 
                   <p className="text-xs text-rose-200 leading-relaxed">
-                    This ticket has already been used at the gate on{' '}
+                    This ticket has already been scanned at the gate on{' '}
                     <strong className="text-white">
                       {new Date(validationResult.checkedInAt || '').toLocaleTimeString()}
                     </strong>.
-                    Do not permit re-entry without manager clearance.
+                    Do not permit duplicate re-entry without manager clearance.
                   </p>
                 </div>
               ) : (
