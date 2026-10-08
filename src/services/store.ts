@@ -1,5 +1,5 @@
 import { 
-  Tenant, Hall, Screen, Movie, Showtime, Booking, SeatHold, SystemLog, SeatConfig, SeatType, TenantRegistrationRequest 
+  Tenant, Hall, Screen, Movie, Showtime, Booking, SeatHold, SystemLog, SeatConfig, SeatType, TenantRegistrationRequest, PlatformBankDetails 
 } from '../types';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
@@ -14,6 +14,16 @@ const STORAGE_KEYS = {
   SEAT_HOLDS: 'mv_cloud_seat_holds_v5',
   SYSTEM_LOGS: 'mv_cloud_logs_v5',
   TENANT_REQUESTS: 'mv_cloud_tenant_requests_v5',
+  PLATFORM_BANK_DETAILS: 'mv_cloud_platform_bank_details_v5',
+};
+
+const DEFAULT_PLATFORM_BANK_DETAILS: PlatformBankDetails = {
+  bankName: 'Bank of Maldives (BML)',
+  accountNumber: '7701 1928 4401 001',
+  accountName: 'CinemaMV Platform Pvt Ltd',
+  currency: 'MVR',
+  instructions: 'Please transfer subscription fee and include your cinema code or name in the transaction memo.',
+  qrImageUrl: ''
 };
 
 // No default/demo data: all cinemas, shows and movies come from tenants (Supabase is the source of truth).
@@ -1309,6 +1319,28 @@ class MaldivianCinemaStore {
     this.broadcastSync();
   }
 
+  // --- PLATFORM BANK DETAILS (Super Admin Managed) ---
+  public getPlatformBankDetails(): PlatformBankDetails {
+    try {
+      const data = localStorage.getItem(STORAGE_KEYS.PLATFORM_BANK_DETAILS);
+      if (data) return JSON.parse(data);
+    } catch {}
+    return { ...DEFAULT_PLATFORM_BANK_DETAILS };
+  }
+
+  public savePlatformBankDetails(details: PlatformBankDetails): void {
+    this.persist(STORAGE_KEYS.PLATFORM_BANK_DETAILS, JSON.stringify(details));
+    this.addLog({
+      id: `log-${Date.now()}-platform-bank`,
+      type: 'tenant',
+      tenantId: 'platform',
+      message: `Super Admin updated CinemaMV Platform Bank Details (${details.bankName} - ${details.accountNumber})`,
+      status: 'info',
+      timestamp: new Date().toISOString()
+    });
+    this.broadcastSync();
+  }
+
   // --- TENANT ONBOARDING REQUESTS ---
   public getTenantRequests(): TenantRegistrationRequest[] {
     try {
@@ -1383,6 +1415,7 @@ class MaldivianCinemaStore {
       tier: 'paid',
       status: 'active',
       ownerEmail: req.contactEmail,
+      passwordHash: req.passwordHash || 'password123',
       subscriptionModel: req.subscriptionPlan,
       subscriptionPriceMvr: req.subscriptionPriceMvr,
       subscriptionBillingDate: new Date(Date.now() + daysToAdd * 86400000).toISOString(),

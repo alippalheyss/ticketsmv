@@ -7,7 +7,7 @@ import {
   Film, Sparkles, MapPin, Calendar, Clock, Ticket, Search, 
   Play, Shield, Star, ChevronRight, Building2, Phone, Mail, 
   MessageCircle, CheckCircle2, ArrowRight, Send, Plus, KeyRound, Check, X,
-  Compass, Globe, ChevronDown
+  Compass, Globe, ChevronDown, CreditCard, AlertCircle
 } from 'lucide-react';
 import { getYouTubeEmbedUrl, getDirectYouTubeWatchUrl } from '../lib/youtube';
 import { MALDIVES_ATOLLS, getIslandsByAtoll } from '../data/maldivesLocations';
@@ -29,6 +29,11 @@ export const HomePage: React.FC = () => {
   // Onboarding Request Modal State
   const [showOnboardingModal, setShowOnboardingModal] = useState(false);
   const [submittedReq, setSubmittedReq] = useState<TenantRegistrationRequest | null>(null);
+  const [reqPassword, setReqPassword] = useState('');
+  const [reqConfirmPassword, setReqConfirmPassword] = useState('');
+  const [reqSlipUrl, setReqSlipUrl] = useState('');
+  const [reqFormError, setReqFormError] = useState('');
+  const [isSubmittingReq, setIsSubmittingReq] = useState(false);
   const [reqForm, setReqForm] = useState<{
     cinemaName: string;
     atoll: string;
@@ -37,14 +42,14 @@ export const HomePage: React.FC = () => {
     contactPhone: string;
     contactEmail: string;
     subscriptionPlan: 'weekly' | 'monthly' | 'yearly' | 'one_month';
-    paymentMethod: 'bml_transfer' | 'cash';
+    paymentMethod: 'bml_transfer';
     notes: string;
   }>({
     cinemaName: '',
     atoll: 'Kaafu (K)',
-    island: 'Malé',
+    island: 'Malé City',
     contactPerson: '',
-    contactPhone: '',
+    contactPhone: '+960 ',
     contactEmail: '',
     subscriptionPlan: 'monthly',
     paymentMethod: 'bml_transfer',
@@ -68,8 +73,11 @@ export const HomePage: React.FC = () => {
     return () => unsub();
   }, []);
 
-  // Unique list of Atolls from registered cinema organizers
-  const atolls = Array.from(
+  // Comprehensive list of all Maldivian atolls for main search dropdown
+  const allMaldivesAtolls = MALDIVES_ATOLLS.map((a) => a.name);
+
+  // Atolls that currently have registered active cinemas (for quick-filter pills)
+  const activeCinemaAtolls = Array.from(
     new Set(
       tenants
         .map((t) => t.branding.atoll)
@@ -77,15 +85,18 @@ export const HomePage: React.FC = () => {
     )
   ).sort();
 
-  // Cascading Islands: if an Atoll is chosen, show only islands in that Atoll
-  const availableIslands = Array.from(
-    new Set(
-      tenants
-        .filter((t) => selectedAtoll === 'all' || t.branding.atoll === selectedAtoll)
-        .map((t) => t.branding.island)
-        .filter((island): island is string => Boolean(island && island.trim()))
-    )
-  ).sort();
+  // Cascading Islands: if an Atoll is chosen, show ALL islands in that atoll from maldivesLocations dataset.
+  // If 'all' atolls is chosen, show all islands where active cinemas exist (or all major cities)
+  const availableIslands = selectedAtoll === 'all'
+    ? Array.from(
+        new Set([
+          ...tenants
+            .map((t) => t.branding.island)
+            .filter((island): island is string => Boolean(island && island.trim())),
+          'Malé City', 'Hulhumalé', 'Vilimalé', 'Kulhudhuffushi City', 'Fuvahmulah City', 'Addu City'
+        ])
+      ).sort()
+    : getIslandsByAtoll(selectedAtoll);
 
   const handleAtollChange = (atoll: string) => {
     setSelectedAtoll(atoll);
@@ -130,24 +141,70 @@ export const HomePage: React.FC = () => {
     return true;
   });
 
+  const handleSlipUploadForReq = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setReqSlipUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
   // Handle in-app request submission
-  const handleSubmitInApp = (e: React.FormEvent) => {
+  const handleSubmitInApp = async (e: React.FormEvent) => {
     e.preventDefault();
-    const price = reqForm.subscriptionPlan === 'weekly' ? 149 : (reqForm.subscriptionPlan === 'yearly' || reqForm.subscriptionPlan === 'one_month') ? 499 : 249;
-    const req = cinemaStore.createTenantRequest({
-      cinemaName: reqForm.cinemaName,
-      atoll: reqForm.atoll,
-      island: reqForm.island,
-      contactPerson: reqForm.contactPerson,
-      contactPhone: reqForm.contactPhone,
-      contactEmail: reqForm.contactEmail,
-      subscriptionPlan: (reqForm.subscriptionPlan === 'one_month' ? 'yearly' : reqForm.subscriptionPlan) as any,
-      subscriptionPriceMvr: price,
-      paymentMethod: reqForm.paymentMethod,
-      channel: 'in_app',
-      notes: reqForm.notes
-    });
-    setSubmittedReq(req);
+    setReqFormError('');
+
+    if (!reqForm.cinemaName || !reqForm.contactPhone || !reqForm.contactEmail) {
+      setReqFormError('Please fill in Cinema Name, Phone, and Email.');
+      return;
+    }
+
+    if (!reqPassword || reqPassword.length < 6) {
+      setReqFormError('Password must be at least 6 characters.');
+      return;
+    }
+
+    if (reqPassword !== reqConfirmPassword) {
+      setReqFormError('Passwords do not match.');
+      return;
+    }
+
+    if (!reqSlipUrl) {
+      setReqFormError('Please attach your BML transfer slip receipt as proof of payment.');
+      return;
+    }
+
+    setIsSubmittingReq(true);
+    try {
+      const price = reqForm.subscriptionPlan === 'weekly' ? 149 : (reqForm.subscriptionPlan === 'yearly' || reqForm.subscriptionPlan === 'one_month') ? 499 : 249;
+      const prefix = reqForm.cinemaName.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase() || 'CIN';
+      const genCode = `${prefix}-${Math.floor(10 + Math.random() * 89)}`;
+
+      const req = cinemaStore.createTenantRequest({
+        cinemaName: reqForm.cinemaName,
+        tenantCode: genCode,
+        atoll: reqForm.atoll,
+        island: reqForm.island,
+        contactPerson: reqForm.contactPerson || 'Manager',
+        contactPhone: reqForm.contactPhone,
+        contactEmail: reqForm.contactEmail.trim().toLowerCase(),
+        passwordHash: reqPassword,
+        subscriptionPlan: (reqForm.subscriptionPlan === 'one_month' ? 'yearly' : reqForm.subscriptionPlan) as any,
+        subscriptionPriceMvr: price,
+        paymentMethod: 'bml_transfer',
+        paymentSlipUrl: reqSlipUrl,
+        channel: 'in_app',
+        notes: reqForm.notes
+      });
+      setSubmittedReq(req);
+    } catch (err: any) {
+      setReqFormError(err.message || 'Failed to submit registration request.');
+    } finally {
+      setIsSubmittingReq(false);
+    }
   };
 
   // Handle WhatsApp request
@@ -255,7 +312,7 @@ export const HomePage: React.FC = () => {
                   className="w-full sm:w-auto appearance-none pl-9 pr-9 py-2.5 rounded-xl bg-slate-900/90 text-xs font-bold text-teal-300 border border-slate-700/80 shadow-inner focus:outline-none focus:ring-1 focus:ring-teal-400 focus:border-teal-400 cursor-pointer transition hover:border-slate-600"
                 >
                   <option value="all" className="bg-slate-900 text-slate-200">All Atolls (ހުރިހާ އަތޮޅު)</option>
-                  {atolls.map((atoll) => (
+                  {allMaldivesAtolls.map((atoll) => (
                     <option key={atoll} value={atoll} className="bg-slate-900 text-slate-200">
                       {atoll}
                     </option>
@@ -302,7 +359,7 @@ export const HomePage: React.FC = () => {
                   <Compass className="w-3 h-3" />
                   <span>All Atolls</span>
                 </button>
-                {atolls.map((atoll) => (
+                {(activeCinemaAtolls.length > 0 ? activeCinemaAtolls : allMaldivesAtolls.slice(0, 6)).map((atoll) => (
                   <button
                     key={atoll}
                     onClick={() => handleAtollChange(atoll)}
@@ -788,6 +845,36 @@ export const HomePage: React.FC = () => {
                   />
                 </div>
 
+                {/* Account Password for Organizer Access */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                      Account Password * <span className="text-slate-400 font-normal">(min 6 chars)</span>
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={reqPassword}
+                      onChange={(e) => setReqPassword(e.target.value)}
+                      placeholder="Enter password"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-300 mb-1">
+                      Confirm Password *
+                    </label>
+                    <input
+                      type="password"
+                      required
+                      value={reqConfirmPassword}
+                      onChange={(e) => setReqConfirmPassword(e.target.value)}
+                      placeholder="Repeat password"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                    />
+                  </div>
+                </div>
+
                 {/* Subscription Plan Choice */}
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1.5">
@@ -835,20 +922,76 @@ export const HomePage: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Payment Method of their Choice */}
+                {/* Live CinemaMV Platform Bank Details for Subscription Transfer */}
+                {(() => {
+                  const platBank = cinemaStore.getPlatformBankDetails();
+                  const targetPrice = reqForm.subscriptionPlan === 'weekly' ? 149 : (reqForm.subscriptionPlan === 'yearly' || reqForm.subscriptionPlan === 'one_month') ? 499 : 249;
+                  return (
+                    <div className="p-3.5 rounded-xl bg-teal-500/10 border border-teal-500/30 space-y-2 text-xs">
+                      <div className="flex items-center justify-between font-bold text-teal-300">
+                        <span className="flex items-center space-x-1.5">
+                          <CreditCard className="w-4 h-4 shrink-0" />
+                          <span>Direct BML / MIB Bank Transfer</span>
+                        </span>
+                        <span className="text-sm font-black text-white">MVR {targetPrice}</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                        <div>
+                          <span className="text-slate-400 block">Bank:</span>
+                          <span className="font-semibold text-white">{platBank.bankName}</span>
+                        </div>
+                        <div>
+                          <span className="text-slate-400 block">Currency:</span>
+                          <span className="font-semibold text-white">{platBank.currency}</span>
+                        </div>
+                        <div className="col-span-2">
+                          <span className="text-slate-400 block">Account Number:</span>
+                          <span className="font-mono font-bold text-teal-300 text-sm">{platBank.accountNumber}</span>
+                        </div>
+                        <div className="col-span-2">
+                          <span className="text-slate-400 block">Account Name:</span>
+                          <span className="font-semibold text-white">{platBank.accountName}</span>
+                        </div>
+                      </div>
+                      {platBank.instructions && (
+                        <div className="text-[11px] text-slate-400 italic pt-1 border-t border-teal-500/20">
+                          {platBank.instructions}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })()}
+
+                {/* Mandatory Transfer Slip Receipt Upload */}
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">
-                    Payment Method of Your Choice
+                    Upload BML Transfer Slip Receipt <span className="text-rose-400">*</span>
                   </label>
-                  <select
-                    value={reqForm.paymentMethod}
-                    onChange={(e) => setReqForm({ ...reqForm, paymentMethod: e.target.value as any })}
-                    className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
-                  >
-                    <option value="bml_transfer">Direct BML / MIB Bank Transfer (Slip Upload)</option>
-                    <option value="cash">Cash / Island Council Purchase Order</option>
-                  </select>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    required
+                    onChange={handleSlipUploadForReq}
+                    className="block w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-teal-500 file:text-slate-950 hover:file:bg-teal-400 cursor-pointer"
+                  />
+                  {reqSlipUrl && (
+                    <div className="mt-2.5 p-2 rounded-xl bg-slate-950 border border-slate-800 flex items-center space-x-3">
+                      <img
+                        src={reqSlipUrl}
+                        alt="Receipt preview"
+                        className="w-14 h-14 object-cover rounded-lg border border-slate-700"
+                      />
+                      <span className="text-xs text-emerald-400 font-medium">✓ Receipt attached successfully</span>
+                    </div>
+                  )}
                 </div>
+
+                {reqFormError && (
+                  <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs flex items-center space-x-2">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    <span>{reqFormError}</span>
+                  </div>
+                )}
 
                 <div>
                   <label className="block text-xs font-bold text-slate-300 mb-1">

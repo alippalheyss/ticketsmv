@@ -46,7 +46,12 @@ export const AdminHubPage: React.FC = () => {
   const [ownerPhone, setOwnerPhone] = useState('+960 ');
   const [island, setIsland] = useState('Malé City');
   const [atoll, setAtoll] = useState('Kaafu (K)');
-  const [chosenPaymentMethod, setChosenPaymentMethod] = useState<'bml_transfer' | 'bml_gateway' | 'mfaisaa' | 'cash'>('bml_transfer');
+  const [regPassword, setRegPassword] = useState('');
+  const [regConfirmPassword, setRegConfirmPassword] = useState('');
+  const [regSlipUrl, setRegSlipUrl] = useState('');
+  const [regFormError, setRegFormError] = useState('');
+  const [isSubmittingReg, setIsSubmittingReg] = useState(false);
+  const [chosenPaymentMethod, setChosenPaymentMethod] = useState<'bml_transfer'>('bml_transfer');
   const [registrationSubmitted, setRegistrationSubmitted] = useState<TenantRegistrationRequest | null>(null);
 
   useEffect(() => {
@@ -268,32 +273,89 @@ export const AdminHubPage: React.FC = () => {
   const handleOpenRegister = (plan: 'weekly' | 'monthly' | 'yearly' | 'one_month' = 'monthly') => {
     setSelectedPlanForRegister(plan);
     setRegistrationSubmitted(null);
+    setRegFormError('');
+    setRegSlipUrl('');
+    setRegPassword('');
+    setRegConfirmPassword('');
     setIsRegisterModalOpen(true);
   };
 
-  const handleSubmitAppRequest = (e: React.FormEvent) => {
+  const handleSlipUploadForReg = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setRegSlipUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSubmitAppRequest = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!cinemaName || !ownerPhone) return;
+    setRegFormError('');
 
-    const prefix = cinemaName.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase() || 'CIN';
-    const genCode = `${prefix}-${Math.floor(10 + Math.random() * 89)}`;
-    const price = selectedPlanForRegister === 'weekly' ? 149 : (selectedPlanForRegister === 'yearly' || selectedPlanForRegister === 'one_month') ? 499 : 249;
+    if (!cinemaName.trim() || !ownerPhone.trim() || !ownerEmail.trim()) {
+      setRegFormError('Please enter Cinema Name, Phone, and Email Address.');
+      return;
+    }
 
-    const req = cinemaStore.createTenantRequest({
-      cinemaName,
-      contactPerson: ownerName || 'Manager',
-      contactEmail: ownerEmail || `${cinemaName.toLowerCase().replace(/\s+/g, '')}@cinemamv.online`,
-      contactPhone: ownerPhone,
-      island: island || 'Malé',
-      atoll: atoll || 'Kaafu',
-      subscriptionPlan: (selectedPlanForRegister === 'one_month' ? 'yearly' : selectedPlanForRegister) as any,
-      subscriptionPriceMvr: price,
-      paymentMethod: chosenPaymentMethod,
-      channel: 'in_app',
-      tenantCode: genCode,
-    });
+    if (!regPassword || regPassword.length < 6) {
+      setRegFormError('Password must be at least 6 characters long.');
+      return;
+    }
 
-    setRegistrationSubmitted(req);
+    if (regPassword !== regConfirmPassword) {
+      setRegFormError('Passwords do not match.');
+      return;
+    }
+
+    if (!regSlipUrl) {
+      setRegFormError('Please attach your BML transfer slip receipt as proof of payment.');
+      return;
+    }
+
+    setIsSubmittingReg(true);
+    try {
+      // Optional: register in Supabase Auth if configured
+      if (isSupabaseConfigured() && ownerEmail.includes('@')) {
+        try {
+          await supabase.auth.signUp({
+            email: ownerEmail.trim().toLowerCase(),
+            password: regPassword
+          });
+        } catch (err) {
+          console.warn('Supabase auth signup for organizer:', err);
+        }
+      }
+
+      const prefix = cinemaName.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase() || 'CIN';
+      const genCode = `${prefix}-${Math.floor(10 + Math.random() * 89)}`;
+      const price = selectedPlanForRegister === 'weekly' ? 149 : (selectedPlanForRegister === 'yearly' || selectedPlanForRegister === 'one_month') ? 499 : 249;
+
+      const req = cinemaStore.createTenantRequest({
+        cinemaName: cinemaName.trim(),
+        tenantCode: genCode,
+        contactPerson: ownerName.trim() || 'Manager',
+        contactEmail: ownerEmail.trim().toLowerCase(),
+        contactPhone: ownerPhone.trim(),
+        island: island || 'Malé City',
+        atoll: atoll || 'Kaafu (K)',
+        passwordHash: regPassword,
+        subscriptionPlan: (selectedPlanForRegister === 'one_month' ? 'yearly' : selectedPlanForRegister) as any,
+        subscriptionPriceMvr: price,
+        paymentMethod: 'bml_transfer',
+        paymentSlipUrl: regSlipUrl,
+        channel: 'in_app',
+        notes: `New organizer subscription for ${selectedPlanForRegister.toUpperCase()} (MVR ${price}) with BML transfer slip attached.`
+      });
+
+      setRegistrationSubmitted(req);
+    } catch (err: any) {
+      setRegFormError(err.message || 'Failed to submit registration request.');
+    } finally {
+      setIsSubmittingReg(false);
+    }
   };
 
   const handleOpenWhatsApp = () => {
@@ -1058,20 +1120,45 @@ export const AdminHubPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Payment Method of Choice */}
-                  <div>
-                    <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                      Payment Method of Choice
-                    </label>
-                    <select
-                      value={chosenPaymentMethod}
-                      onChange={(e: any) => setChosenPaymentMethod(e.target.value)}
-                      className="w-full px-3 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
-                    >
-                      <option value="bml_transfer">Direct BML / MIB Bank Transfer (Slip Upload)</option>
-                      <option value="cash">Cash Payment at Office Counter</option>
-                    </select>
-                  </div>
+                  {/* Live CinemaMV Platform Bank Details for Subscription Transfer */}
+                  {(() => {
+                    const platBank = cinemaStore.getPlatformBankDetails();
+                    const targetPrice = selectedPlanForRegister === 'weekly' ? 149 : (selectedPlanForRegister === 'yearly' || selectedPlanForRegister === 'one_month') ? 499 : 249;
+                    return (
+                      <div className="p-3.5 rounded-xl bg-teal-500/10 border border-teal-500/30 space-y-2 text-xs">
+                        <div className="flex items-center justify-between font-bold text-teal-300">
+                          <span className="flex items-center space-x-1.5">
+                            <CreditCard className="w-4 h-4 shrink-0" />
+                            <span>Direct BML / MIB Bank Transfer</span>
+                          </span>
+                          <span className="text-sm font-black text-white">MVR {targetPrice}</span>
+                        </div>
+                        <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                          <div>
+                            <span className="text-slate-400 block">Bank:</span>
+                            <span className="font-semibold text-white">{platBank.bankName}</span>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 block">Currency:</span>
+                            <span className="font-semibold text-white">{platBank.currency}</span>
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-slate-400 block">Account Number:</span>
+                            <span className="font-mono font-bold text-teal-300 text-sm">{platBank.accountNumber}</span>
+                          </div>
+                          <div className="col-span-2">
+                            <span className="text-slate-400 block">Account Name:</span>
+                            <span className="font-semibold text-white">{platBank.accountName}</span>
+                          </div>
+                        </div>
+                        {platBank.instructions && (
+                          <div className="text-[11px] text-slate-400 italic pt-1 border-t border-teal-500/20">
+                            {platBank.instructions}
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })()}
 
                   {/* Cinema Name & Location */}
                   <div>
@@ -1157,14 +1244,90 @@ export const AdminHubPage: React.FC = () => {
                     </div>
                   </div>
 
+                  {/* Email Address & Password for Login */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      Account Email Address *
+                    </label>
+                    <input
+                      type="email"
+                      required
+                      value={ownerEmail}
+                      onChange={(e) => setOwnerEmail(e.target.value)}
+                      placeholder="e.g. manager@cinemamv.online"
+                      className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                    />
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        Account Password * <span className="text-slate-400 font-normal">(min 6 chars)</span>
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        value={regPassword}
+                        onChange={(e) => setRegPassword(e.target.value)}
+                        placeholder="Create password"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                        Confirm Password *
+                      </label>
+                      <input
+                        type="password"
+                        required
+                        value={regConfirmPassword}
+                        onChange={(e) => setRegConfirmPassword(e.target.value)}
+                        placeholder="Repeat password"
+                        className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                      />
+                    </div>
+                  </div>
+
+                  {/* Mandatory Transfer Slip Receipt Upload */}
+                  <div>
+                    <label className="block text-[11px] font-bold text-slate-300 mb-1">
+                      Upload BML Transfer Slip Receipt <span className="text-rose-400">*</span>
+                    </label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      required
+                      onChange={handleSlipUploadForReg}
+                      className="block w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-teal-500 file:text-slate-950 hover:file:bg-teal-400 cursor-pointer"
+                    />
+                    {regSlipUrl && (
+                      <div className="mt-2.5 p-2 rounded-xl bg-slate-950 border border-slate-800 flex items-center space-x-3">
+                        <img
+                          src={regSlipUrl}
+                          alt="Receipt preview"
+                          className="w-14 h-14 object-cover rounded-lg border border-slate-700"
+                        />
+                        <span className="text-xs text-emerald-400 font-medium">✓ Receipt attached successfully</span>
+                      </div>
+                    )}
+                  </div>
+
+                  {regFormError && (
+                    <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs flex items-center space-x-2">
+                      <AlertCircle className="w-4 h-4 shrink-0" />
+                      <span>{regFormError}</span>
+                    </div>
+                  )}
+
                   {/* Submission Action Buttons (3 Channels) */}
                   <div className="pt-2 space-y-2">
                     <button
                       type="submit"
-                      className="w-full py-3 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md shadow-teal-500/20 transition active:scale-95 flex items-center justify-center space-x-2"
+                      disabled={isSubmittingReg}
+                      className="w-full py-3 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md shadow-teal-500/20 transition active:scale-95 flex items-center justify-center space-x-2 disabled:opacity-50"
                     >
                       <Send className="w-4 h-4" />
-                      <span>Submit Request via App (Instant Tenant Code)</span>
+                      <span>{isSubmittingReg ? 'Submitting Request...' : 'Submit Request via App (Instant Tenant Code)'}</span>
                     </button>
 
                     <div className="grid grid-cols-2 gap-2">

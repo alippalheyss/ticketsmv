@@ -43,6 +43,15 @@ export interface Tenant {
   cinemaSlots?: number; // Allowed cinema management slots (default: 1)
 }
 
+export interface PlatformBankDetails {
+  bankName: string;
+  accountNumber: string;
+  accountName: string;
+  currency: string;
+  instructions: string;
+  qrImageUrl?: string;
+}
+
 export interface TenantRegistrationRequest {
   id: string;
   tenantCode: string; // Unique assigned code e.g. "ORG-9142"
@@ -52,10 +61,12 @@ export interface TenantRegistrationRequest {
   contactPerson: string;
   contactPhone: string;
   contactEmail: string;
+  passwordHash?: string;
   subscriptionPlan: 'weekly' | 'monthly' | 'yearly' | 'one_month';
   subscriptionPriceMvr: number;
   paymentMethod: 'bml_transfer' | 'bml_gateway' | 'mfaisaa' | 'cash';
   paymentSlipUrl?: string;
+  slipUrl?: string;
   channel: 'in_app' | 'whatsapp' | 'telegram';
   notes?: string;
   status: 'pending' | 'approved' | 'rejected';

@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { cinemaStore } from '../services/store';
-import { Tenant, SystemLog, Booking, Hall, SubscriptionModel, TenantRegistrationRequest } from '../types';
+import { Tenant, SystemLog, Booking, Hall, SubscriptionModel, TenantRegistrationRequest, PlatformBankDetails } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { 
   Shield, TrendingUp, Users, Ticket, Building, Activity, 
   DollarSign, Mail, Search, RefreshCw, Calendar, Sparkles, 
-  CheckCircle2, Lock, LogOut, KeyRound, AlertCircle, Phone, MessageCircle, Send, Check, Trash2 
+  CheckCircle2, Lock, LogOut, KeyRound, AlertCircle, Phone, MessageCircle, Send, Check, Trash2,
+  CreditCard, Save, Upload
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -26,6 +27,9 @@ export const SuperAdminPage: React.FC = () => {
   const [systemLogs, setSystemLogs] = useState<SystemLog[]>([]);
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [halls, setHalls] = useState<Hall[]>([]);
+  const [platformBank, setPlatformBank] = useState<PlatformBankDetails>(() => cinemaStore.getPlatformBankDetails());
+  const [isSavingBank, setIsSavingBank] = useState(false);
+  const [bankSavedMessage, setBankSavedMessage] = useState(false);
   const [logFilter, setLogFilter] = useState<'all' | 'payment' | 'tenant' | 'email' | 'checkin'>('all');
   const [searchTerm, setSearchTerm] = useState('');
 
@@ -35,6 +39,7 @@ export const SuperAdminPage: React.FC = () => {
     setSystemLogs(cinemaStore.getSystemLogs());
     setBookings(cinemaStore.getBookings());
     setHalls(cinemaStore.getHalls());
+    setPlatformBank(cinemaStore.getPlatformBankDetails());
   };
 
   useEffect(() => {
@@ -239,6 +244,30 @@ export const SuperAdminPage: React.FC = () => {
     return true;
   });
 
+  const handleBankQrUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setPlatformBank((prev) => ({ ...prev, qrImageUrl: reader.result as string }));
+      };
+      reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSavePlatformBank = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!platformBank.bankName.trim() || !platformBank.accountNumber.trim()) {
+      alert('Please enter Bank Name and Account Number.');
+      return;
+    }
+    setIsSavingBank(true);
+    cinemaStore.savePlatformBankDetails(platformBank);
+    setIsSavingBank(false);
+    setBankSavedMessage(true);
+    setTimeout(() => setBankSavedMessage(false), 4000);
+  };
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-8">
       {/* Minimal Top Header */}
@@ -403,6 +432,148 @@ export const SuperAdminPage: React.FC = () => {
             ))}
           </div>
         )}
+      </div>
+
+      {/* CINEMAMV PLATFORM BANK ACCOUNT DETAILS (SUPER ADMIN MANAGED) */}
+      <div className="glass-panel rounded-3xl p-6 border border-teal-500/30 space-y-5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center space-x-3">
+            <div className="w-10 h-10 rounded-2xl bg-teal-500/20 text-teal-400 border border-teal-500/30 flex items-center justify-center shrink-0">
+              <CreditCard className="w-5 h-5" />
+            </div>
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center space-x-2">
+                <span>CinemaMV Platform Bank Transfer Details</span>
+                <span className="text-[10px] uppercase font-bold px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                  Subscription & SaaS Payments
+                </span>
+              </h2>
+              <p className="text-xs text-slate-400">
+                Organizers pay their Weekly (MVR 149), Monthly (MVR 249), or 1-Year Pass (MVR 499) to this bank account.
+              </p>
+            </div>
+          </div>
+          {bankSavedMessage && (
+            <div className="px-3.5 py-1.5 rounded-xl bg-emerald-500/20 border border-emerald-500/40 text-emerald-300 font-bold text-xs flex items-center space-x-1.5 animate-in fade-in">
+              <CheckCircle2 className="w-4 h-4" />
+              <span>Bank Details Saved Live!</span>
+            </div>
+          )}
+        </div>
+
+        <form onSubmit={handleSavePlatformBank} className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Bank Name *</label>
+              <input
+                type="text"
+                required
+                value={platformBank.bankName}
+                onChange={(e) => setPlatformBank({ ...platformBank, bankName: e.target.value })}
+                placeholder="Bank of Maldives (BML)"
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:border-teal-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Account Number *</label>
+              <input
+                type="text"
+                required
+                value={platformBank.accountNumber}
+                onChange={(e) => setPlatformBank({ ...platformBank, accountNumber: e.target.value })}
+                placeholder="7701 1928 4401 001"
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-teal-300 font-mono font-bold text-xs focus:border-teal-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Account Holder Name *</label>
+              <input
+                type="text"
+                required
+                value={platformBank.accountName}
+                onChange={(e) => setPlatformBank({ ...platformBank, accountName: e.target.value })}
+                placeholder="CinemaMV Platform Pvt Ltd"
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:border-teal-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">Currency *</label>
+              <input
+                type="text"
+                required
+                value={platformBank.currency}
+                onChange={(e) => setPlatformBank({ ...platformBank, currency: e.target.value })}
+                placeholder="MVR"
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:border-teal-400"
+              />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 pt-1">
+            <div className="lg:col-span-2">
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Transfer Memo & Instructions for Organizers
+              </label>
+              <textarea
+                rows={3}
+                value={platformBank.instructions}
+                onChange={(e) => setPlatformBank({ ...platformBank, instructions: e.target.value })}
+                placeholder="Please include your cinema code or name in the transaction memo..."
+                className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:border-teal-400"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Platform BML QR Code (Optional)
+              </label>
+              <div className="flex items-center space-x-3">
+                {platformBank.qrImageUrl ? (
+                  <img
+                    src={platformBank.qrImageUrl}
+                    alt="Platform QR"
+                    className="w-16 h-16 rounded-xl object-contain bg-white p-1 border border-slate-700 shrink-0"
+                  />
+                ) : (
+                  <div className="w-16 h-16 rounded-xl bg-slate-900 border border-dashed border-slate-700 flex items-center justify-center text-slate-500 text-[10px] text-center p-1 shrink-0">
+                    No QR
+                  </div>
+                )}
+                <div className="flex-1">
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={handleBankQrUpload}
+                    className="block w-full text-xs text-slate-400 file:mr-2 file:py-1 file:px-2.5 file:rounded-lg file:border-0 file:text-[11px] file:font-semibold file:bg-teal-500/20 file:text-teal-300 hover:file:bg-teal-500/30 cursor-pointer"
+                  />
+                  {platformBank.qrImageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => setPlatformBank({ ...platformBank, qrImageUrl: '' })}
+                      className="text-[10px] text-rose-400 hover:underline mt-1 block"
+                    >
+                      Remove QR
+                    </button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end pt-2 border-t border-slate-800">
+            <button
+              type="submit"
+              disabled={isSavingBank}
+              className="px-5 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-teal-500/25 transition active:scale-95 flex items-center space-x-1.5"
+            >
+              <Save className="w-3.5 h-3.5" />
+              <span>{isSavingBank ? 'Saving...' : 'Save Platform Bank Details'}</span>
+            </button>
+          </div>
+        </form>
       </div>
 
       {/* Tenant Management Table */}

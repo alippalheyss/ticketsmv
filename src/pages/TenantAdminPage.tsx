@@ -2937,34 +2937,47 @@ export const TenantAdminPage: React.FC = () => {
             </div>
 
             {/* CinemaMV Platform Bank Details for Subscription Transfer */}
-            <div className="p-4 rounded-xl bg-teal-500/10 border border-teal-500/20 space-y-2 text-xs">
-              <div className="font-bold text-teal-300 flex items-center space-x-1.5">
-                <CreditCard className="w-4 h-4 shrink-0" />
-                <span>CinemaMV Platform Payment Account</span>
-              </div>
-              <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
-                <div>
-                  <span className="text-slate-400 block">Bank Name:</span>
-                  <span className="font-medium text-white">Bank of Maldives (BML)</span>
+            {(() => {
+              const platBank = cinemaStore.getPlatformBankDetails();
+              return (
+                <div className="p-4 rounded-xl bg-teal-500/10 border border-teal-500/20 space-y-2 text-xs">
+                  <div className="font-bold text-teal-300 flex items-center justify-between">
+                    <span className="flex items-center space-x-1.5">
+                      <CreditCard className="w-4 h-4 shrink-0" />
+                      <span>CinemaMV Platform Payment Account</span>
+                    </span>
+                    <span className="text-[10px] text-teal-300 bg-teal-500/20 px-2 py-0.5 rounded font-mono">BML Transfer</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                    <div>
+                      <span className="text-slate-400 block">Bank Name:</span>
+                      <span className="font-medium text-white">{platBank.bankName}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block">Account Currency:</span>
+                      <span className="font-medium text-white">{platBank.currency}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-slate-400 block">Account Number:</span>
+                      <span className="font-mono font-bold text-teal-300 text-sm">{platBank.accountNumber}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-slate-400 block">Account Name:</span>
+                      <span className="font-medium text-white">{platBank.accountName}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-slate-400 block">Transfer Memo / Remarks:</span>
+                      <span className="font-mono text-amber-300 font-bold">SUB-{currentTenant.tenantCode || currentTenant.slug}</span>
+                    </div>
+                    {platBank.instructions && (
+                      <div className="col-span-2 text-[10px] text-slate-400 italic pt-1 border-t border-teal-500/20">
+                        {platBank.instructions}
+                      </div>
+                    )}
+                  </div>
                 </div>
-                <div>
-                  <span className="text-slate-400 block">Account Currency:</span>
-                  <span className="font-medium text-white">MVR (Maldivian Rufiyaa)</span>
-                </div>
-                <div className="col-span-2">
-                  <span className="text-slate-400 block">Account Number:</span>
-                  <span className="font-mono font-bold text-teal-300 text-sm">7701 1928 4401 001</span>
-                </div>
-                <div className="col-span-2">
-                  <span className="text-slate-400 block">Account Name:</span>
-                  <span className="font-medium text-white">CinemaMV Platform Pvt Ltd</span>
-                </div>
-                <div className="col-span-2">
-                  <span className="text-slate-400 block">Transfer Memo / Remarks:</span>
-                  <span className="font-mono text-amber-300 font-bold">SUB-{currentTenant.tenantCode || currentTenant.slug}</span>
-                </div>
-              </div>
-            </div>
+              );
+            })()}
 
             <form onSubmit={handleSubmitSubscriptionRequest} className="space-y-4">
               <div>
