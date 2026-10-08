@@ -5,7 +5,7 @@ import { Tenant, Hall, Screen, Movie, Showtime } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { 
   Building2, MapPin, Phone, MessageSquare, Calendar, Clock, 
-  Film, Sparkles, ChevronRight, ShieldCheck, AlertCircle 
+  Film, Sparkles, ChevronRight, ShieldCheck, AlertCircle, Star 
 } from 'lucide-react';
 
 interface TenantPortalProps {
@@ -275,27 +275,68 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
                 className="glass-panel rounded-2xl overflow-hidden border border-slate-800 hover:border-teal-500/40 transition flex flex-col justify-between"
               >
                 <div>
-                  <div className="relative aspect-[16/9] overflow-hidden bg-slate-900">
+                  {/* 1. Backdrop Banner & Badges */}
+                  <div className="relative aspect-[16/9] overflow-hidden bg-slate-900 group">
                     <img
                       src={movie?.backdropUrl || movie?.posterUrl}
                       alt={movie?.titleEn}
-                      className="w-full h-full object-cover"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                     />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0a0f1d] via-transparent to-black/30" />
-                    <span className="absolute top-3 left-3 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-slate-950">
-                      {movie?.ageRating}
-                    </span>
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0a0f1d] via-[#0a0f1d]/40 to-black/30" />
+                    
+                    <div className="absolute top-3 left-3 flex flex-wrap gap-1.5 z-10">
+                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-950/80 text-teal-300 border border-teal-500/30 backdrop-blur-sm">
+                        {movie?.ageRating}
+                      </span>
+                      {movie?.tagline && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-950/80 text-amber-300 border border-amber-500/30 flex items-center space-x-1 backdrop-blur-sm">
+                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                          <span>{movie.tagline}</span>
+                        </span>
+                      )}
+                    </div>
+
                     {isSharedHall && (
-                      <span className="absolute top-3 right-3 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-teal-500 text-slate-950 shadow-md">
+                      <span className="absolute top-3 right-3 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-teal-500 text-slate-950 shadow-md z-10">
                         Shared Hall • {sessionScreens.length} Screens
                       </span>
                     )}
                   </div>
 
-                  <div className="p-5 space-y-2.5">
-                    <div>
-                      <h3 className="font-bold text-base text-white">{movie?.titleEn}</h3>
-                      <h4 className="font-dhivehi text-xs text-teal-400">{movie?.titleDv}</h4>
+                  {/* 2. Movie Header with Theatrical Vertical Poster & Details */}
+                  <div className="p-5 pt-0 relative space-y-3">
+                    <div className="flex items-start space-x-3.5 -mt-10 sm:-mt-12 relative z-20">
+                      {/* Vertical 2:3 Movie Poster Artwork */}
+                      <div className="relative w-20 sm:w-24 aspect-[2/3] shrink-0 rounded-xl overflow-hidden border-2 border-slate-700/80 shadow-2xl bg-slate-900 group-hover:border-teal-500/60 transition shadow-black/80">
+                        <img
+                          src={movie?.posterUrl || movie?.backdropUrl}
+                          alt={`${movie?.titleEn} poster`}
+                          className="w-full h-full object-cover"
+                          loading="lazy"
+                        />
+                      </div>
+
+                      {/* Title & Key Specs next to poster */}
+                      <div className="flex-1 pt-10 sm:pt-12 min-w-0">
+                        <h3 className="font-bold text-base sm:text-lg text-white group-hover:text-teal-300 transition truncate leading-snug">
+                          {movie?.titleEn}
+                        </h3>
+                        <p className="text-xs text-teal-400 font-dhivehi font-bold mt-0.5 truncate">
+                          {movie?.titleDv}
+                        </p>
+                        {movie?.durationMinutes && (
+                          <div className="flex items-center space-x-1 text-[11px] text-slate-400 mt-1">
+                            <Clock className="w-3 h-3 text-teal-400" />
+                            <span>{movie.durationMinutes} mins</span>
+                            {movie.genre && movie.genre.length > 0 && (
+                              <>
+                                <span>•</span>
+                                <span>{movie.genre.slice(0, 2).join(', ')}</span>
+                              </>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     <div className="text-xs text-slate-300 space-y-1 bg-slate-900/60 p-3 rounded-xl border border-slate-800">

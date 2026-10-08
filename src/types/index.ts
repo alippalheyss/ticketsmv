@@ -132,6 +132,7 @@ export interface Movie {
   cast: string[];
   genre: string[];
   releaseDate: string;
+  tagline?: string; // e.g. "Maldivian Premiere", "Special Screening", "Blockbuster"
   published?: boolean; // true = Live on site, false = Private / Draft
 }
 

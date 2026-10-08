@@ -386,12 +386,7 @@ export const HomePage: React.FC = () => {
               </div>
 
               {/* Island quick selection: only shown after choosing an atoll */}
-              {selectedAtoll === 'all' ? (
-                <div className="text-[11px] text-slate-500 flex items-center justify-center space-x-1.5 py-0.5">
-                  <MapPin className="w-3.5 h-3.5 text-slate-500" />
-                  <span>Choose an atoll above to view islands (ރަށްތައް ފެންނާނީ ފުރަތަމަ އަތޮޅެއް ހިޔާރުކުރުމުން)</span>
-                </div>
-              ) : (
+              {selectedAtoll !== 'all' && (
                 <div className="flex flex-wrap items-center justify-center gap-1.5 text-xs animate-fade-in">
                   <span className="text-[11px] font-bold text-slate-400 mr-1 flex items-center">
                     <MapPin className="w-3.5 h-3.5 mr-1 text-cyan-400 inline" />
@@ -535,10 +530,12 @@ export const HomePage: React.FC = () => {
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-950/80 text-teal-300 border border-teal-500/30 backdrop-blur-sm">
                           {movie.ageRating}
                         </span>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-950/80 text-amber-300 border border-amber-500/30 flex items-center space-x-1 backdrop-blur-sm">
-                          <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
-                          <span>Maldivian Premiere</span>
-                        </span>
+                        {movie.tagline && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-950/80 text-amber-300 border border-amber-500/30 flex items-center space-x-1 backdrop-blur-sm">
+                            <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                            <span>{movie.tagline}</span>
+                          </span>
+                        )}
                       </div>
 
                       {movie.trailerYoutubeUrl && (

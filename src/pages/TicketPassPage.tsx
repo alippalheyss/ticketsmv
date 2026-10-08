@@ -9,8 +9,7 @@ import {
   Sparkles, MapPin, Clock, Ticket, ShieldCheck, ExternalLink, ArrowLeft,
   FileText, Loader2
 } from 'lucide-react';
-import html2canvas from 'html2canvas';
-import { jsPDF } from 'jspdf';
+import { exportTicketAsPng, exportTicketAsPdf } from '../lib/ticketExporter';
 
 export const TicketPassPage: React.FC = () => {
   const { bookingRef } = useParams<{ bookingRef: string }>();
@@ -109,66 +108,45 @@ END:VCALENDAR`;
     window.print();
   };
 
-  // Download Ticket as PNG Image
+  // Download Clean Ticket as PNG Image
   const downloadTicketImage = async () => {
-    const el = document.getElementById('ticket-pass-element');
-    if (!el || !booking) return;
+    if (!booking || !movie || !showtime) return;
     setIsDownloadingImage(true);
     try {
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#0f172a',
-        logging: false
+      await exportTicketAsPng({
+        booking,
+        movie,
+        showtime,
+        hall: hall || undefined,
+        screen: screen || undefined,
+        tenant: tenant || undefined,
+        qrDataUrl
       });
-      const dataUrl = canvas.toDataURL('image/png');
-      const link = document.createElement('a');
-      link.href = dataUrl;
-      link.download = `ticket_${booking.bookingRef}.png`;
-      document.body.appendChild(link);
-      link.click();
-      document.body.removeChild(link);
     } catch (err) {
       console.error('Failed to export ticket as image:', err);
-      window.print();
+      alert('Could not export ticket image. Please try again.');
     } finally {
       setIsDownloadingImage(false);
     }
   };
 
-  // Download Ticket as PDF Document
+  // Download Clean Ticket as PDF Document
   const downloadTicketPdf = async () => {
-    const el = document.getElementById('ticket-pass-element');
-    if (!el || !booking) return;
+    if (!booking || !movie || !showtime) return;
     setIsDownloadingPdf(true);
     try {
-      const canvas = await html2canvas(el, {
-        scale: 2,
-        useCORS: true,
-        allowTaint: true,
-        backgroundColor: '#0f172a',
-        logging: false
+      await exportTicketAsPdf({
+        booking,
+        movie,
+        showtime,
+        hall: hall || undefined,
+        screen: screen || undefined,
+        tenant: tenant || undefined,
+        qrDataUrl
       });
-      const imgData = canvas.toDataURL('image/png');
-      const pdf = new jsPDF({
-        orientation: 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = pdf.internal.pageSize.getHeight();
-      const imgWidth = pdfWidth - 20; // 10mm margins
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      pdf.setFillColor(15, 23, 42);
-      pdf.rect(0, 0, pdfWidth, pdfHeight, 'F');
-      pdf.addImage(imgData, 'PNG', 10, 15, imgWidth, Math.min(imgHeight, pdfHeight - 30));
-      pdf.save(`ticket_${booking.bookingRef}.pdf`);
     } catch (err) {
       console.error('Failed to export ticket as PDF:', err);
-      window.print();
+      alert('Could not export ticket PDF. Please try again.');
     } finally {
       setIsDownloadingPdf(false);
     }

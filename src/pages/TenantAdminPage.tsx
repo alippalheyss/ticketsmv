@@ -9,7 +9,7 @@ import {
   Building2, Film, Calendar, Users, Sliders, ExternalLink, Plus, Edit3, 
   Download, DollarSign, Upload, MapPin, Check, Ban, Trash2, LayoutGrid, 
   CreditCard, Sparkles, AlertCircle, AlertTriangle, Copy, Image, Play, CheckCircle2, X, LogOut, Lock, KeyRound,
-  Globe, RefreshCw, Save, Send, ZoomIn, ZoomOut, Maximize2, Eye
+  Globe, RefreshCw, Save, Send, ZoomIn, ZoomOut, Maximize2, Eye, Star
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -152,6 +152,7 @@ export const TenantAdminPage: React.FC = () => {
     durationMinutes: 120,
     ageRating: 'PG-13',
     trailerYoutubeUrl: '',
+    tagline: '',
     cast: [],
     genre: [],
     releaseDate: new Date().toISOString().split('T')[0],
@@ -324,13 +325,14 @@ export const TenantAdminPage: React.FC = () => {
   // Open Movie Editor
   const handleOpenMovieEditor = (movie?: Movie) => {
     if (movie) {
-      setMovieForm({ ...movie });
+      setMovieForm({ ...movie, tagline: movie.tagline || '' });
     } else {
       setMovieForm({
         id: `movie-${Date.now()}`,
         tenantId: currentTenant?.id,
         titleEn: '',
         titleDv: '',
+        tagline: '',
         synopsisEn: '',
         synopsisDv: '',
         posterUrl: '',
@@ -1245,6 +1247,12 @@ export const TenantAdminPage: React.FC = () => {
                     <span className="absolute top-3 left-3 px-2 py-0.5 rounded text-[10px] font-bold bg-amber-500 text-slate-950">
                       {mv.ageRating}
                     </span>
+                    {mv.tagline && (
+                      <span className="absolute top-3 right-3 px-2 py-0.5 rounded-full text-[10px] font-bold bg-slate-950/80 text-amber-300 border border-amber-500/30 flex items-center space-x-1 backdrop-blur-sm">
+                        <Star className="w-3 h-3 fill-amber-400 text-amber-400" />
+                        <span>{mv.tagline}</span>
+                      </span>
+                    )}
                   </div>
 
                   {/* Poster + Info */}
@@ -2440,6 +2448,22 @@ export const TenantAdminPage: React.FC = () => {
                   placeholder="https://www.youtube.com/watch?v=..."
                   className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm font-mono"
                 />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label className="block text-xs font-semibold text-slate-400 mb-1">
+                  Movie Tagline / Promotional Badge (e.g. "Maldivian Premiere", "Special Screening", "Blockbuster")
+                </label>
+                <input
+                  type="text"
+                  value={movieForm.tagline || ''}
+                  onChange={(e) => setMovieForm({ ...movieForm, tagline: e.target.value })}
+                  placeholder="e.g. Maldivian Premiere"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm"
+                />
+                <span className="text-[10px] text-slate-500 mt-1 block">
+                  Promotional banner badge displayed on movie posters and banners. Leave blank if not needed.
+                </span>
               </div>
 
               <div>
