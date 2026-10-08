@@ -384,30 +384,44 @@ class MaldivianCinemaStore {
 
   /**
    * Single ticket pass lookup for a guest opening /ticket/:bookingRef.
+   * Always checks cloud for live payment/approval status if connected.
    */
   public async fetchBookingByRef(bookingRef: string): Promise<Booking | undefined> {
     const cleanRef = bookingRef.trim().toUpperCase();
-    const existing = this.getBookingByRef(cleanRef);
-    if (existing) return existing;
     if (this.cloud) {
       try {
         const { data, error } = await supabase
           .from(RECORDS_TABLE)
           .select('data')
           .eq('kind', 'booking')
-          .limit(50);
+          .order('updated_at', { ascending: false })
+          .limit(200);
+
         if (!error && data) {
-          const match = data.find((r: any) => r.data?.bookingRef?.toUpperCase() === cleanRef);
+          const match = data.find((r: any) => 
+            r.data?.bookingRef?.toUpperCase() === cleanRef || 
+            r.data?.qrCodeHash === cleanRef ||
+            r.data?.id === cleanRef
+          );
           if (match?.data) {
+            const b = match.data as Booking;
             const list = this.getBookings();
-            list.unshift(match.data);
+            const idx = list.findIndex((x) => x.id === b.id || x.bookingRef.toUpperCase() === cleanRef);
+            if (idx >= 0) {
+              list[idx] = b;
+            } else {
+              list.unshift(b);
+            }
             localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(list));
-            return match.data;
+            this.broadcastSync();
+            return b;
           }
         }
-      } catch {}
+      } catch (e) {
+        console.warn('[cloud] fetchBookingByRef error:', e);
+      }
     }
-    return undefined;
+    return this.getBookingByRef(cleanRef);
   }
 
   /** Subscribes to live database changes so every open device updates instantly. */
@@ -1296,16 +1310,33 @@ class MaldivianCinemaStore {
     return { success: true };
   }
 
-  public updateBookingPaymentStatus(bookingId: string, status: 'paid' | 'expired'): void {
+  public async updateBookingPaymentStatus(bookingId: string, status: 'paid' | 'expired'): Promise<void> {
     const list = this.getBookings();
     const b = list.find((item) => item.id === bookingId);
     if (b) {
       b.paymentStatus = status;
       this.persist(STORAGE_KEYS.BOOKINGS, JSON.stringify(list));
-      if (status === 'expired' && this.cloud) {
-        // Free the seats in the cloud so other customers can book them
-        supabase.from(BOOKED_SEATS_TABLE).delete().eq('booking_id', bookingId).then(() => {});
+
+      if (this.cloud) {
+        try {
+          const { error } = await supabase.from(RECORDS_TABLE).upsert({
+            kind: 'booking',
+            id: b.id,
+            tenant_id: b.tenantId,
+            data: b,
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'kind,id' });
+          if (error) console.warn('[cloud] updateBookingPaymentStatus upsert error:', error);
+        } catch (err) {
+          console.warn('[cloud] updateBookingPaymentStatus failed:', err);
+        }
+
+        if (status === 'expired') {
+          // Free the seats in the cloud so other customers can book them
+          supabase.from(BOOKED_SEATS_TABLE).delete().eq('booking_id', bookingId).then(() => {});
+        }
       }
+
       this.addLog({
         id: `log-${Date.now()}`,
         type: 'payment',
@@ -1318,11 +1349,130 @@ class MaldivianCinemaStore {
     }
   }
 
+  /**
+   * Asynchronous ticket validator that checks local store AND queries Supabase in real-time.
+   * Guarantees that freshly approved tickets validate immediately even across different devices!
+   */
+  public async validateTicketAsync(qrCodeOrRef: string, tenantId?: string): Promise<{ 
+    valid: boolean; 
+    alreadyCheckedIn: boolean; 
+    booking?: Booking; 
+    message: string; 
+    checkedInAt?: string;
+  }> {
+    const term = qrCodeOrRef.trim();
+    let booking = this.getBookings().find((b) => b.qrCodeHash === term || b.bookingRef.toUpperCase() === term.toUpperCase());
+
+    // If booking is not found locally OR has pending_verification status, query cloud for latest status
+    if ((!booking || booking.paymentStatus === 'pending_verification') && this.cloud) {
+      try {
+        const fresh = await this.fetchBookingByRef(term);
+        if (fresh) {
+          booking = fresh;
+        } else if (tenantId) {
+          const tenantBookings = await this.syncBookingsForTenant(tenantId);
+          booking = tenantBookings.find((b) => b.qrCodeHash === term || b.bookingRef.toUpperCase() === term.toUpperCase());
+        }
+      } catch (err) {
+        console.warn('[validateTicketAsync] cloud check error:', err);
+      }
+    }
+
+    if (!booking) {
+      return {
+        valid: false,
+        alreadyCheckedIn: false,
+        message: 'Invalid ticket. QR code or Booking Reference does not exist in the system.'
+      };
+    }
+
+    if (tenantId && booking.tenantId !== tenantId) {
+      const otherTenant = this.getTenants().find((t) => t.id === booking.tenantId);
+      return {
+        valid: false,
+        alreadyCheckedIn: false,
+        booking,
+        message: `Wrong Cinema! This ticket is for "${otherTenant?.name || 'another cinema'}", not for this venue.`
+      };
+    }
+
+    if (booking.paymentStatus === 'pending_verification') {
+      return {
+        valid: false,
+        alreadyCheckedIn: false,
+        booking,
+        message: 'Payment verification pending. Transfer receipt must be approved before entry.'
+      };
+    }
+
+    if (booking.paymentStatus === 'expired') {
+      return {
+        valid: false,
+        alreadyCheckedIn: false,
+        booking,
+        message: 'Ticket is expired or cancelled.'
+      };
+    }
+
+    if (booking.checkedIn) {
+      return {
+        valid: false,
+        alreadyCheckedIn: true,
+        booking,
+        checkedInAt: booking.checkedInAt,
+        message: `DUPLICATE ENTRY DETECTED! Already scanned on ${new Date(booking.checkedInAt || '').toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`
+      };
+    }
+
+    const checkinTime = new Date().toISOString();
+    booking.checkedIn = true;
+    booking.checkedInAt = checkinTime;
+
+    const list = this.getBookings();
+    const idx = list.findIndex((b) => b.id === booking!.id);
+    if (idx >= 0) list[idx] = booking;
+    else list.unshift(booking);
+    localStorage.setItem(STORAGE_KEYS.BOOKINGS, JSON.stringify(list));
+
+    if (this.cloud) {
+      try {
+        await supabase.from(RECORDS_TABLE).upsert({
+          kind: 'booking',
+          id: booking.id,
+          tenant_id: booking.tenantId,
+          data: booking,
+          updated_at: checkinTime
+        }, { onConflict: 'kind,id' });
+      } catch (err) {
+        console.warn('[cloud] checkin upsert failed:', err);
+      }
+    }
+
+    this.addLog({
+      id: `log-${Date.now()}-chk`,
+      type: 'checkin',
+      tenantId: booking.tenantId,
+      message: `Ticket ${booking.bookingRef} validated at entrance door`,
+      details: `Gatekeeper checked in ${booking.seats.length} guest(s): ${booking.guestName}`,
+      status: 'success',
+      timestamp: checkinTime
+    });
+
+    this.broadcastSync();
+    return {
+      valid: true,
+      alreadyCheckedIn: false,
+      booking,
+      checkedInAt: checkinTime,
+      message: `ACCESS GRANTED! Welcome ${booking.guestName}. Seat(s): ${booking.seats.map(s => s.label).join(', ')}`
+    };
+  }
+
   public validateTicket(qrCodeOrRef: string, tenantId?: string): { 
     valid: boolean; 
     alreadyCheckedIn: boolean; 
     booking?: Booking; 
-    message: string;
+    message: string; 
     checkedInAt?: string;
   } {
     const term = qrCodeOrRef.trim();
@@ -1382,6 +1532,16 @@ class MaldivianCinemaStore {
     const idx = list.findIndex((b) => b.id === booking.id);
     if (idx >= 0) list[idx] = booking;
     this.persist(STORAGE_KEYS.BOOKINGS, JSON.stringify(list));
+
+    if (this.cloud) {
+      supabase.from(RECORDS_TABLE).upsert({
+        kind: 'booking',
+        id: booking.id,
+        tenant_id: booking.tenantId,
+        data: booking,
+        updated_at: checkinTime
+      }, { onConflict: 'kind,id' }).then(() => {});
+    }
 
     this.addLog({
       id: `log-${Date.now()}-chk`,

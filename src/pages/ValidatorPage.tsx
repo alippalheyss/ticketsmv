@@ -6,7 +6,7 @@ import { useLanguage } from '../context/LanguageContext';
 import { 
   QrCode, Camera, CheckCircle2, AlertTriangle, XCircle, Search, 
   Clock, ShieldCheck, MapPin, History, Lock, LogOut, KeyRound, 
-  Building2, Sparkles, AlertCircle 
+  Building2, Sparkles, AlertCircle, RefreshCw, Loader2 
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
@@ -41,6 +41,8 @@ export const ValidatorPage: React.FC = () => {
   const [manualCode, setManualCode] = useState('');
   const [isScanning, setIsScanning] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [isManualSyncing, setIsManualSyncing] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
 
   // Scan result state
   const [validationResult, setValidationResult] = useState<{
@@ -60,7 +62,7 @@ export const ValidatorPage: React.FC = () => {
 
   const scannerRef = useRef<Html5Qrcode | null>(null);
 
-  // Sync tenant changes from store
+  // Sync tenant changes and bookings from store
   useEffect(() => {
     const unsub = cinemaStore.subscribe(() => {
       if (currentTenant) {
@@ -69,6 +71,16 @@ export const ValidatorPage: React.FC = () => {
       }
     });
     return () => unsub();
+  }, [currentTenant?.id]);
+
+  // Periodically and immediately sync bookings from cloud for this cinema
+  useEffect(() => {
+    if (!currentTenant?.id) return;
+    cinemaStore.syncBookingsForTenant(currentTenant.id);
+    const interval = setInterval(() => {
+      cinemaStore.syncBookingsForTenant(currentTenant.id);
+    }, 4000);
+    return () => clearInterval(interval);
   }, [currentTenant?.id]);
 
   // Handle Staff Login
@@ -189,23 +201,28 @@ export const ValidatorPage: React.FC = () => {
     } catch {}
   };
 
-  const handleValidation = (code: string) => {
-    if (!code.trim() || !currentTenant) return;
-    // Strictly validate against the currently authenticated cinema to prevent cross-venue validation
-    const res = cinemaStore.validateTicket(code.trim(), currentTenant.id);
-    setValidationResult(res);
-    playBeep(res.valid);
+  const handleValidation = async (code: string) => {
+    if (!code.trim() || !currentTenant || isValidating) return;
+    setIsValidating(true);
+    try {
+      // Strictly validate against the currently authenticated cinema with live cloud check
+      const res = await cinemaStore.validateTicketAsync(code.trim(), currentTenant.id);
+      setValidationResult(res);
+      playBeep(res.valid);
 
-    if (res.booking) {
-      setScanHistory((prev) => [
-        {
-          ref: res.booking!.bookingRef,
-          guest: res.booking!.guestName,
-          time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
-          valid: res.valid
-        },
-        ...prev.slice(0, 9)
-      ]);
+      if (res.booking) {
+        setScanHistory((prev) => [
+          {
+            ref: res.booking!.bookingRef,
+            guest: res.booking!.guestName,
+            time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }),
+            valid: res.valid
+          },
+          ...prev.slice(0, 9)
+        ]);
+      }
+    } finally {
+      setIsValidating(false);
     }
   };
 
@@ -386,14 +403,33 @@ export const ValidatorPage: React.FC = () => {
           </div>
         </div>
 
-        {/* Exit / Logout Button */}
-        <button
-          onClick={handleStaffLogout}
-          className="flex items-center justify-center space-x-1.5 px-3.5 py-2 rounded-xl bg-slate-850 hover:bg-rose-500/10 border border-slate-700 hover:border-rose-500/30 text-xs font-semibold text-slate-300 hover:text-rose-300 transition"
-        >
-          <LogOut className="w-3.5 h-3.5" />
-          <span>Exit Gatekeeper</span>
-        </button>
+        {/* Action Buttons: Sync Cloud & Logout */}
+        <div className="flex items-center space-x-2">
+          <button
+            type="button"
+            onClick={async () => {
+              if (currentTenant) {
+                setIsManualSyncing(true);
+                await cinemaStore.syncBookingsForTenant(currentTenant.id);
+                setTimeout(() => setIsManualSyncing(false), 600);
+              }
+            }}
+            disabled={isManualSyncing}
+            className="flex items-center justify-center space-x-1.5 px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs font-semibold text-teal-300 transition"
+            title="Refresh latest ticket approvals from cloud"
+          >
+            <RefreshCw className={`w-3.5 h-3.5 text-teal-400 ${isManualSyncing ? 'animate-spin' : ''}`} />
+            <span>{isManualSyncing ? 'Syncing...' : 'Sync Cloud'}</span>
+          </button>
+
+          <button
+            onClick={handleStaffLogout}
+            className="flex items-center justify-center space-x-1.5 px-3.5 py-2 rounded-xl bg-slate-850 hover:bg-rose-500/10 border border-slate-700 hover:border-rose-500/30 text-xs font-semibold text-slate-300 hover:text-rose-300 transition"
+          >
+            <LogOut className="w-3.5 h-3.5" />
+            <span>Exit Gatekeeper</span>
+          </button>
+        </div>
       </div>
 
       {/* Main Scanner Section */}

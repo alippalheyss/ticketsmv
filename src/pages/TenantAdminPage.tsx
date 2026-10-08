@@ -2283,8 +2283,8 @@ export const TenantAdminPage: React.FC = () => {
                   <div className="flex space-x-2 pt-2 border-t border-slate-800">
                     <button
                       type="button"
-                      onClick={() => {
-                        cinemaStore.updateBookingPaymentStatus(b.id, 'paid');
+                      onClick={async () => {
+                        await cinemaStore.updateBookingPaymentStatus(b.id, 'paid');
                         refreshData();
                       }}
                       className="flex-1 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-md transition"
@@ -2293,8 +2293,8 @@ export const TenantAdminPage: React.FC = () => {
                     </button>
                     <button
                       type="button"
-                      onClick={() => {
-                        cinemaStore.updateBookingPaymentStatus(b.id, 'expired');
+                      onClick={async () => {
+                        await cinemaStore.updateBookingPaymentStatus(b.id, 'expired');
                         refreshData();
                       }}
                       className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-rose-950/40 text-rose-400 hover:text-rose-300 font-bold text-xs border border-rose-500/30 transition"
@@ -3312,8 +3312,8 @@ export const TenantAdminPage: React.FC = () => {
                 <div className="flex items-center space-x-3 w-full sm:w-auto">
                   <button
                     type="button"
-                    onClick={() => {
-                      cinemaStore.updateBookingPaymentStatus(selectedSlipBooking.id, 'paid');
+                    onClick={async () => {
+                      await cinemaStore.updateBookingPaymentStatus(selectedSlipBooking.id, 'paid');
                       setSelectedSlipBooking(prev => prev ? { ...prev, paymentStatus: 'paid' } : null);
                       refreshData();
                     }}
@@ -3324,8 +3324,8 @@ export const TenantAdminPage: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={() => {
-                      cinemaStore.updateBookingPaymentStatus(selectedSlipBooking.id, 'expired');
+                    onClick={async () => {
+                      await cinemaStore.updateBookingPaymentStatus(selectedSlipBooking.id, 'expired');
                       setSelectedSlipBooking(prev => prev ? { ...prev, paymentStatus: 'expired' } : null);
                       refreshData();
                     }}

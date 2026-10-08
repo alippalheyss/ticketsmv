@@ -9,6 +9,7 @@ import {
   Sparkles, MapPin, Clock, Ticket, ShieldCheck, ExternalLink, ArrowLeft,
   FileText, Loader2
 } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { exportTicketAsPng, exportTicketAsPdf } from '../lib/ticketExporter';
 
 export const TicketPassPage: React.FC = () => {
@@ -27,37 +28,84 @@ export const TicketPassPage: React.FC = () => {
   const [showEmailModal, setShowEmailModal] = useState(false);
   const [isDownloadingImage, setIsDownloadingImage] = useState(false);
   const [isDownloadingPdf, setIsDownloadingPdf] = useState(false);
+  const previousStatusRef = useRef<string | null>(null);
+
+  // Helper to load and populate full booking details
+  const applyBookingData = (b: Booking) => {
+    setBooking(b);
+    const st = cinemaStore.getShowtimeById(b.showtimeId);
+    if (st) {
+      setShowtime(st);
+      const sc = cinemaStore.getScreenById(st.screenId);
+      if (sc) setScreen(sc);
+      const mv = cinemaStore.getMovieById(st.movieId);
+      if (mv) setMovie(mv);
+      const hl = cinemaStore.getHalls().find((h) => h.id === st.hallId);
+      if (hl) setHall(hl);
+      const tn = cinemaStore.getTenantById(st.tenantId);
+      if (tn) setTenant(tn);
+    }
+
+    // Check if status transitioned from pending to paid -> celebratory confetti!
+    if (previousStatusRef.current === 'pending_verification' && b.paymentStatus === 'paid') {
+      try {
+        confetti({
+          particleCount: 80,
+          spread: 70,
+          origin: { y: 0.6 }
+        });
+      } catch {}
+    }
+    previousStatusRef.current = b.paymentStatus;
+
+    // Generate Cryptographic QR code with signed hash payload
+    QRCode.toDataURL(b.qrCodeHash, {
+      width: 320,
+      margin: 2,
+      color: {
+        dark: '#0a0f1d',
+        light: '#ffffff'
+      }
+    }).then((url) => {
+      setQrDataUrl(url);
+    }).catch(err => console.error('QR code render error:', err));
+  };
 
   useEffect(() => {
     if (!bookingRef) return;
-    const b = cinemaStore.getBookingByRef(bookingRef);
-    if (b) {
-      setBooking(b);
-      const st = cinemaStore.getShowtimeById(b.showtimeId);
-      if (st) {
-        setShowtime(st);
-        const sc = cinemaStore.getScreenById(st.screenId);
-        if (sc) setScreen(sc);
-        const mv = cinemaStore.getMovieById(st.movieId);
-        if (mv) setMovie(mv);
-        const hl = cinemaStore.getHalls().find((h) => h.id === st.hallId);
-        if (hl) setHall(hl);
-        const tn = cinemaStore.getTenantById(st.tenantId);
-        if (tn) setTenant(tn);
-      }
 
-      // Generate Cryptographic QR code with signed hash payload
-      QRCode.toDataURL(b.qrCodeHash, {
-        width: 320,
-        margin: 2,
-        color: {
-          dark: '#0a0f1d',
-          light: '#ffffff'
-        }
-      }).then((url) => {
-        setQrDataUrl(url);
-      }).catch(err => console.error('QR code render error:', err));
+    // 1. Initial immediate local load
+    const local = cinemaStore.getBookingByRef(bookingRef);
+    if (local) {
+      applyBookingData(local);
     }
+
+    // 2. Fetch authoritative live state from cloud
+    cinemaStore.fetchBookingByRef(bookingRef).then((cloudB) => {
+      if (cloudB) applyBookingData(cloudB);
+    });
+
+    // 3. Subscribe to Realtime store changes
+    const unsub = cinemaStore.subscribe(() => {
+      const fresh = cinemaStore.getBookingByRef(bookingRef);
+      if (fresh) {
+        applyBookingData(fresh);
+      }
+    });
+
+    // 4. Live polling interval if payment is pending verification
+    const pollInterval = setInterval(() => {
+      cinemaStore.fetchBookingByRef(bookingRef).then((updated) => {
+        if (updated) {
+          applyBookingData(updated);
+        }
+      });
+    }, 3000);
+
+    return () => {
+      unsub();
+      clearInterval(pollInterval);
+    };
   }, [bookingRef]);
 
   if (!booking || !movie || !showtime) {
