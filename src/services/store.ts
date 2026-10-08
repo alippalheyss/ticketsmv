@@ -23,7 +23,11 @@ const DEFAULT_PLATFORM_BANK_DETAILS: PlatformBankDetails = {
   accountName: 'CinemaMV Platform Pvt Ltd',
   currency: 'MVR',
   instructions: 'Please transfer subscription fee and include your cinema code or name in the transaction memo.',
-  qrImageUrl: ''
+  qrImageUrl: '',
+  contactPhone: '+960 7771234',
+  contactWhatsapp: '+960 7771234',
+  contactTelegram: '@TicketsMVAdmin',
+  contactEmail: 'alippalhey@gmail.com'
 };
 
 // No default/demo data: all cinemas, shows and movies come from tenants (Supabase is the source of truth).
@@ -549,6 +553,20 @@ class MaldivianCinemaStore {
           t.subscriptionModel = 'yearly';
           if (t.subscriptionPriceMvr !== 499) {
             t.subscriptionPriceMvr = 499;
+            updated = true;
+          }
+        }
+        if (t.branding) {
+          if (t.branding.taglineEn && /island cinema \(free trial\)|free trial/i.test(t.branding.taglineEn)) {
+            t.branding.taglineEn = '';
+            updated = true;
+          }
+          if (t.branding.taglineDv && /ޓްރަޔަލް/i.test(t.branding.taglineDv)) {
+            t.branding.taglineDv = '';
+            updated = true;
+          }
+          if (t.branding.terms && /3-day free trial account|free trial account/i.test(t.branding.terms)) {
+            t.branding.terms = '';
             updated = true;
           }
         }

@@ -125,37 +125,21 @@ const translations: Record<Language, Record<string, string>> = {
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined);
 
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [language, setLanguageState] = useState<Language>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('mv_tickets_lang');
-      return (saved === 'dv' || saved === 'en') ? saved : 'en';
-    }
-    return 'en';
-  });
+  const [language, setLanguageState] = useState<Language>('en');
 
   const setLanguage = (lang: Language) => {
     setLanguageState(lang);
-    if (typeof window !== 'undefined') {
-      localStorage.setItem('mv_tickets_lang', lang);
-      if (lang === 'dv') {
-        document.documentElement.setAttribute('dir', 'rtl');
-        document.documentElement.setAttribute('lang', 'dv');
-      } else {
-        document.documentElement.setAttribute('dir', 'ltr');
-        document.documentElement.setAttribute('lang', 'en');
-      }
-    }
   };
 
   useEffect(() => {
-    if (language === 'dv') {
-      document.documentElement.setAttribute('dir', 'rtl');
-      document.documentElement.setAttribute('lang', 'dv');
-    } else {
+    if (typeof window !== 'undefined') {
+      try {
+        localStorage.removeItem('mv_tickets_lang');
+      } catch {}
       document.documentElement.setAttribute('dir', 'ltr');
       document.documentElement.setAttribute('lang', 'en');
     }
-  }, [language]);
+  }, []);
 
   const t = (key: string): string => {
     return translations[language][key] || translations.en[key] || key;

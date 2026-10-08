@@ -215,9 +215,9 @@ export const AdminHubPage: React.FC = () => {
         contactViber: trialOwnerPhone.trim(),
         island: trialIsland.trim(),
         atoll: trialAtoll.trim(),
-        terms: '3-Day Free Trial Account (Limited to 1 Hall, 1 Screen, up to 100 seats). Upgrade anytime with zero lock-in.',
-        taglineEn: 'Island Cinema (Free Trial)',
-        taglineDv: 'ރަށު ސިނަމާ (ޓްރަޔަލް)'
+        terms: '',
+        taglineEn: '',
+        taglineDv: ''
       }
     };
 
@@ -368,11 +368,15 @@ export const AdminHubPage: React.FC = () => {
       `Plan: ${selectedPlanForRegister.toUpperCase()} (Zero Commission)\n` +
       `Preferred Payment: ${chosenPaymentMethod.replace('_', ' ').toUpperCase()}`
     );
-    window.open(`https://wa.me/9607771234?text=${text}`, '_blank');
+    const platSettings = cinemaStore.getPlatformBankDetails();
+    const waNumber = (platSettings.contactWhatsapp || '+960 7771234').replace(/\D/g, '');
+    window.open(`https://wa.me/${waNumber}?text=${text}`, '_blank');
   };
 
   const handleOpenTelegram = () => {
-    window.open('https://t.me/CinemaMVAdmin', '_blank');
+    const platSettings = cinemaStore.getPlatformBankDetails();
+    const tgUser = (platSettings.contactTelegram || 'TicketsMVAdmin').replace('@', '').trim();
+    window.open(`https://t.me/${tgUser}`, '_blank');
   };
 
   // IF USER IS ALREADY LOGGED IN: SHOW THEIR AUTHENTICATED ORGANIZER DASHBOARD

@@ -229,7 +229,9 @@ export const HomePage: React.FC = () => {
       `Payment Choice: ${reqForm.paymentMethod.replace('_', ' ').toUpperCase()}\n` +
       `Notes: ${reqForm.notes || 'Ready to onboard'}`
     );
-    window.open(`https://wa.me/9607771234?text=${text}`, '_blank');
+    const platSettings = cinemaStore.getPlatformBankDetails();
+    const waNumber = (platSettings.contactWhatsapp || '+960 7771234').replace(/\D/g, '');
+    window.open(`https://wa.me/${waNumber}?text=${text}`, '_blank');
   };
 
   // Handle Telegram request
@@ -251,10 +253,12 @@ export const HomePage: React.FC = () => {
       notes: reqForm.notes
     });
 
+    const platSettings = cinemaStore.getPlatformBankDetails();
+    const tgUser = (platSettings.contactTelegram || 'TicketsMVAdmin').replace('@', '').trim();
     const text = encodeURIComponent(
       `CinemaMV.online Organizer Request - Code: ${code} - ${reqForm.cinemaName} (${reqForm.island}) - Plan: ${reqForm.subscriptionPlan} - Payment: ${reqForm.paymentMethod}`
     );
-    window.open(`https://t.me/TicketsMVAdmin?text=${text}`, '_blank');
+    window.open(`https://t.me/${tgUser}?text=${text}`, '_blank');
   };
 
   return (
@@ -703,35 +707,44 @@ export const HomePage: React.FC = () => {
                 Choose Weekly (MVR 149), Monthly (MVR 249), or 1-Year Pass (MVR 499). Submit through our app, or send directly via WhatsApp or Telegram.
               </p>
 
-              <div className="pt-2 flex flex-wrap gap-4 text-xs font-semibold text-slate-200">
-                <a
-                  href="https://wa.me/9607771234?text=Hello%20CinemaMV.online%20Admin,%20I%20would%20like%20to%20register%20as%20a%20cinema%20organizer"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center space-x-1.5 text-emerald-400 hover:text-emerald-300 transition"
-                >
-                  <MessageCircle className="w-4 h-4" />
-                  <span>WhatsApp: +960 777-1234</span>
-                </a>
+              {(() => {
+                const platSettings = cinemaStore.getPlatformBankDetails();
+                const waNumber = (platSettings.contactWhatsapp || '+960 7771234').replace(/\D/g, '');
+                const tgUser = (platSettings.contactTelegram || 'TicketsMVAdmin').replace('@', '').trim();
+                const phoneNum = platSettings.contactPhone || '+960 7771234';
 
-                <a
-                  href="https://t.me/TicketsMVAdmin"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="flex items-center space-x-1.5 text-sky-400 hover:text-sky-300 transition"
-                >
-                  <Send className="w-4 h-4" />
-                  <span>Telegram: @TicketsMVAdmin</span>
-                </a>
+                return (
+                  <div className="pt-2 flex flex-wrap gap-4 text-xs font-semibold text-slate-200">
+                    <a
+                      href={`https://wa.me/${waNumber}?text=${encodeURIComponent('Hello CinemaMV.online Admin, I would like to register as a cinema organizer')}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center space-x-1.5 text-emerald-400 hover:text-emerald-300 transition"
+                    >
+                      <MessageCircle className="w-4 h-4" />
+                      <span>WhatsApp: {platSettings.contactWhatsapp || '+960 777-1234'}</span>
+                    </a>
 
-                <a
-                  href="tel:+9603301234"
-                  className="flex items-center space-x-1.5 text-teal-400 hover:text-teal-300 transition"
-                >
-                  <Phone className="w-4 h-4" />
-                  <span>Call: +960 330-1234</span>
-                </a>
-              </div>
+                    <a
+                      href={`https://t.me/${tgUser}`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="flex items-center space-x-1.5 text-sky-400 hover:text-sky-300 transition"
+                    >
+                      <Send className="w-4 h-4" />
+                      <span>Telegram: @{tgUser}</span>
+                    </a>
+
+                    <a
+                      href={`tel:${phoneNum.replace(/\s+/g, '')}`}
+                      className="flex items-center space-x-1.5 text-teal-400 hover:text-teal-300 transition"
+                    >
+                      <Phone className="w-4 h-4" />
+                      <span>Call: {phoneNum}</span>
+                    </a>
+                  </div>
+                );
+              })()}
             </div>
 
             <div className="flex items-center gap-3 shrink-0">

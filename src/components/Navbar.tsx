@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { 
-  Film, Globe, Download, Menu, X, Sparkles, Building2 
+  Film, Download, Menu, X 
 } from 'lucide-react';
 import { useLanguage } from '../context/LanguageContext';
 
 export const Navbar: React.FC = () => {
-  const { language, setLanguage, t, isDhivehi } = useLanguage();
+  const { t, isDhivehi } = useLanguage();
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
@@ -75,18 +75,6 @@ export const Navbar: React.FC = () => {
                 <span>Install App</span>
               </button>
             )}
-
-            {/* Language Switcher */}
-            <button
-              onClick={() => setLanguage(language === 'en' ? 'dv' : 'en')}
-              className="flex items-center space-x-1.5 px-3 py-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 text-xs font-medium text-slate-200 transition"
-              title="Toggle Dhivehi / English"
-            >
-              <Globe className="w-3.5 h-3.5 text-teal-400" />
-              <span className={language === 'en' ? 'font-dhivehi text-sm font-bold text-teal-300' : 'font-sans font-bold'}>
-                {language === 'en' ? 'ދިވެހި' : 'English'}
-              </span>
-            </button>
 
             {/* Mobile menu toggle button */}
             <button

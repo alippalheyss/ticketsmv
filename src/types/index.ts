@@ -50,6 +50,10 @@ export interface PlatformBankDetails {
   currency: string;
   instructions: string;
   qrImageUrl?: string;
+  contactPhone?: string;
+  contactWhatsapp?: string;
+  contactTelegram?: string;
+  contactEmail?: string;
 }
 
 export interface TenantRegistrationRequest {

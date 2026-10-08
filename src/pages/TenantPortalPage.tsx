@@ -170,7 +170,7 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
         </div>
         <div className="p-4 rounded-2xl bg-slate-900/80 border border-slate-800 text-xs text-slate-400 space-y-1">
           <p>Are you the cinema organizer?</p>
-          <p>Contact Super Admin at <span className="text-teal-400 font-mono font-bold">alippalhey@gmail.com</span> to reactivate your portal.</p>
+          <p>Contact Super Admin at <span className="text-teal-400 font-mono font-bold">{cinemaStore.getPlatformBankDetails().contactEmail || 'alippalhey@gmail.com'}</span> {cinemaStore.getPlatformBankDetails().contactPhone ? `or ${cinemaStore.getPlatformBankDetails().contactPhone}` : ''} to reactivate your portal.</p>
         </div>
         <div className="pt-2">
           <Link
@@ -218,9 +218,11 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
                 <h1 className="text-2xl sm:text-4xl font-extrabold text-white mt-1">
                   {tenant.name}
                 </h1>
-                <p className={`text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl ${isDhivehi ? 'font-dhivehi' : ''}`}>
-                  {isDhivehi && tenant.branding.taglineDv ? tenant.branding.taglineDv : tenant.branding.taglineEn}
-                </p>
+                {tenant.branding.taglineEn && !/free trial/i.test(tenant.branding.taglineEn) && (
+                  <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl">
+                    {tenant.branding.taglineEn}
+                  </p>
+                )}
               </div>
             </div>
 
@@ -342,7 +344,7 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
         </div>
 
         {/* Custom Cinema Booking Terms */}
-        {tenant.branding.terms && (
+        {tenant.branding.terms && !/free trial/i.test(tenant.branding.terms) && (
           <div className="glass-panel rounded-2xl p-5 border border-slate-800 space-y-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center space-x-1.5">
               <ShieldCheck className="w-4 h-4 text-teal-400" />
