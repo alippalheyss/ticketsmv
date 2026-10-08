@@ -1350,6 +1350,233 @@ class MaldivianCinemaStore {
   }
 
   /**
+   * Updates guest contact information for an existing booking.
+   */
+  public async updateBookingGuestDetails(
+    bookingId: string, 
+    guestName: string, 
+    guestPhone: string, 
+    guestEmail?: string
+  ): Promise<boolean> {
+    const list = this.getBookings();
+    const b = list.find((item) => item.id === bookingId);
+    if (!b) return false;
+
+    b.guestName = guestName.trim() || b.guestName;
+    b.guestPhone = guestPhone.trim() || b.guestPhone;
+    if (guestEmail !== undefined) b.guestEmail = guestEmail.trim();
+
+    this.persist(STORAGE_KEYS.BOOKINGS, JSON.stringify(list));
+
+    if (this.cloud) {
+      try {
+        await supabase.from(RECORDS_TABLE).upsert({
+          kind: 'booking',
+          id: b.id,
+          tenant_id: b.tenantId,
+          data: b,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'kind,id' });
+      } catch (err) {
+        console.warn('[cloud] updateBookingGuestDetails upsert error:', err);
+      }
+    }
+
+    this.addLog({
+      id: `log-${Date.now()}`,
+      type: 'tenant',
+      tenantId: b.tenantId,
+      message: `Booking ${b.bookingRef} attendee details updated to ${b.guestName} (${b.guestPhone})`,
+      status: 'info',
+      timestamp: new Date().toISOString()
+    });
+
+    this.broadcastSync();
+    return true;
+  }
+
+  /**
+   * Cancels a specific booked seat and frees it for other guests.
+   */
+  public async cancelBookedSeat(
+    bookingId: string, 
+    seatId: string, 
+    screenId?: string
+  ): Promise<{ success: boolean; message: string }> {
+    const list = this.getBookings();
+    const b = list.find((item) => item.id === bookingId);
+    if (!b) return { success: false, message: 'Booking not found.' };
+
+    const targetIndex = b.seats.findIndex((s) => s.seatId === seatId && (!screenId || s.screenId === screenId));
+    if (targetIndex === -1) return { success: false, message: 'Seat not found in this booking.' };
+
+    const removedSeat = b.seats[targetIndex];
+    const compositeSeatId = removedSeat.screenId ? `${removedSeat.screenId}_${removedSeat.seatId}` : removedSeat.seatId;
+
+    if (b.seats.length <= 1) {
+      // Entire booking cancelled
+      b.paymentStatus = 'expired';
+      b.seats = [];
+    } else {
+      // Remove only this seat and adjust price
+      b.seats.splice(targetIndex, 1);
+      b.totalAmount = Math.max(0, b.totalAmount - (removedSeat.price || 0));
+    }
+
+    this.persist(STORAGE_KEYS.BOOKINGS, JSON.stringify(list));
+
+    if (this.cloud) {
+      try {
+        // Free this specific seat in BOOKED_SEATS_TABLE
+        await supabase
+          .from(BOOKED_SEATS_TABLE)
+          .delete()
+          .eq('showtime_id', b.showtimeId)
+          .eq('seat_id', compositeSeatId);
+
+        // Update the booking in RECORDS_TABLE
+        await supabase.from(RECORDS_TABLE).upsert({
+          kind: 'booking',
+          id: b.id,
+          tenant_id: b.tenantId,
+          data: b,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'kind,id' });
+      } catch (err) {
+        console.warn('[cloud] cancelBookedSeat cloud sync error:', err);
+      }
+    }
+
+    this.addLog({
+      id: `log-${Date.now()}`,
+      type: 'tenant',
+      tenantId: b.tenantId,
+      message: `Seat ${removedSeat.label} in Booking ${b.bookingRef} cancelled and freed`,
+      status: 'warning',
+      timestamp: new Date().toISOString()
+    });
+
+    this.broadcastSync();
+    return { success: true, message: `Seat ${removedSeat.label} was successfully cancelled and released.` };
+  }
+
+  /**
+   * Exchanges an existing seat with an unoccupied seat in the same show.
+   */
+  public async exchangeBookedSeat(
+    bookingId: string, 
+    oldSeatId: string, 
+    newSeat: {
+      seatId: string;
+      row: string;
+      col: number;
+      label: string;
+      type: 'standard' | 'vip' | 'couple' | 'accessible';
+      price: number;
+      screenId?: string;
+    }
+  ): Promise<{ success: boolean; message: string }> {
+    const list = this.getBookings();
+    const b = list.find((item) => item.id === bookingId);
+    if (!b) return { success: false, message: 'Booking not found.' };
+
+    const targetIndex = b.seats.findIndex((s) => s.seatId === oldSeatId);
+    if (targetIndex === -1) return { success: false, message: 'Original seat not found in booking.' };
+
+    // Verify new seat is not already booked in that showtime
+    const occupiedSeats = this.getBookedSeatIds(b.showtimeId, newSeat.screenId);
+    if (occupiedSeats.has(newSeat.seatId)) {
+      return { success: false, message: `Seat ${newSeat.label} is already booked or reserved.` };
+    }
+
+    const oldSeat = b.seats[targetIndex];
+    const oldComposite = oldSeat.screenId ? `${oldSeat.screenId}_${oldSeat.seatId}` : oldSeat.seatId;
+    const newComposite = newSeat.screenId ? `${newSeat.screenId}_${newSeat.seatId}` : newSeat.seatId;
+
+    // Update the booking seat array and adjust total amount
+    b.seats[targetIndex] = { ...newSeat };
+    b.totalAmount = Math.max(0, b.totalAmount - (oldSeat.price || 0) + (newSeat.price || 0));
+
+    this.persist(STORAGE_KEYS.BOOKINGS, JSON.stringify(list));
+
+    if (this.cloud) {
+      try {
+        // Delete old seat from BOOKED_SEATS_TABLE
+        await supabase
+          .from(BOOKED_SEATS_TABLE)
+          .delete()
+          .eq('showtime_id', b.showtimeId)
+          .eq('seat_id', oldComposite);
+
+        // Insert new seat into BOOKED_SEATS_TABLE
+        await supabase.from(BOOKED_SEATS_TABLE).insert({
+          showtime_id: b.showtimeId,
+          seat_id: newComposite,
+          booking_id: b.id,
+          tenant_id: b.tenantId
+        });
+
+        // Update the booking in RECORDS_TABLE
+        await supabase.from(RECORDS_TABLE).upsert({
+          kind: 'booking',
+          id: b.id,
+          tenant_id: b.tenantId,
+          data: b,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'kind,id' });
+      } catch (err) {
+        console.warn('[cloud] exchangeBookedSeat cloud sync error:', err);
+      }
+    }
+
+    this.addLog({
+      id: `log-${Date.now()}`,
+      type: 'tenant',
+      tenantId: b.tenantId,
+      message: `Seat exchanged: ${oldSeat.label} → ${newSeat.label} for Booking ${b.bookingRef}`,
+      status: 'info',
+      timestamp: new Date().toISOString()
+    });
+
+    this.broadcastSync();
+    return { success: true, message: `Seat successfully exchanged from ${oldSeat.label} to ${newSeat.label}.` };
+  }
+
+  /**
+   * Fast walk-in ticket creation for organizers.
+   */
+  public async adminCreateWalkinBooking(
+    showtimeId: string,
+    seats: any[],
+    guestName: string,
+    guestPhone: string,
+    tenantId: string
+  ): Promise<{ success: boolean; booking?: Booking; error?: string }> {
+    const bookingRef = `MV-WALK-${Math.floor(1000 + Math.random() * 9000)}`;
+    const totalAmount = seats.reduce((sum, s) => sum + (s.price || 0), 0);
+    const newBooking: Booking = {
+      id: `b-walk-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+      bookingRef,
+      showtimeId,
+      tenantId,
+      guestName: guestName.trim() || 'Walk-in Guest',
+      guestEmail: 'walkin@cinema.mv',
+      guestPhone: guestPhone.trim() || '+960 777-0000',
+      seats,
+      totalAmount,
+      paymentMethod: 'cash',
+      paymentStatus: 'paid',
+      qrCodeHash: `HASH-${bookingRef}-${Date.now()}`,
+      checkedIn: false,
+      createdAt: new Date().toISOString()
+    };
+
+    const res = await this.createBookingAsync(newBooking, `admin-walkin-${Date.now()}`);
+    if (!res.success) return { success: false, error: res.error };
+    return { success: true, booking: newBooking };
+  }
+
+  /**
    * Asynchronous ticket validator that checks local store AND queries Supabase in real-time.
    * Guarantees that freshly approved tickets validate immediately even across different devices!
    */

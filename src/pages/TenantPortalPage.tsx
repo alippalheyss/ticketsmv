@@ -5,8 +5,9 @@ import { Tenant, Hall, Screen, Movie, Showtime } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { 
   Building2, MapPin, Phone, MessageSquare, Calendar, Clock, 
-  Film, Sparkles, ChevronRight, ShieldCheck, AlertCircle, Star 
+  Film, Sparkles, ChevronRight, ShieldCheck, AlertCircle, Star, Play, X
 } from 'lucide-react';
+import { getYouTubeEmbedUrl, getDirectYouTubeWatchUrl } from '../lib/youtube';
 
 interface TenantPortalProps {
   tenantSlugFromHost?: string;
@@ -22,6 +23,7 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
   const [screens, setScreens] = useState<Screen[]>([]);
   const [movies, setMovies] = useState<Movie[]>([]);
   const [showtimes, setShowtimes] = useState<Showtime[]>([]);
+  const [selectedMovieForTrailer, setSelectedMovieForTrailer] = useState<Movie | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -185,10 +187,10 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
   }
 
   return (
-    <div className="space-y-10 pb-16">
-      {/* Branded Cinema Banner Header */}
+    <div className="space-y-4 sm:space-y-8 pb-16">
+      {/* Branded Cinema Banner Header - Highly Compact on Mobile so Movies are Above the Fold */}
       <div className="relative overflow-hidden bg-slate-950 border-b border-slate-800">
-        <div className="absolute inset-0 h-72 sm:h-96 w-full overflow-hidden opacity-30">
+        <div className="absolute inset-0 h-32 sm:h-80 w-full overflow-hidden opacity-25">
           <img
             src={tenant.branding.bannerUrl}
             alt={tenant.name}
@@ -197,29 +199,29 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
           <div className="absolute inset-0 bg-gradient-to-t from-[#070b14] via-[#070b14]/70 to-transparent" />
         </div>
 
-        <div className="relative max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-24 pb-10 sm:pt-32">
-          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-6">
-            <div className="flex items-center space-x-4">
+        <div className="relative max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-3 pb-3 sm:pt-28 sm:pb-8">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-2.5 sm:gap-6">
+            <div className="flex items-center space-x-3 sm:space-x-4">
               <img
                 src={tenant.branding.logoUrl}
                 alt={tenant.name}
-                className="w-20 h-20 sm:w-24 sm:h-24 rounded-2xl object-cover border-2 border-teal-500/40 shadow-2xl bg-slate-900"
+                className="w-12 h-12 sm:w-20 sm:h-20 rounded-xl sm:rounded-2xl object-cover border-2 border-teal-500/40 shadow-xl bg-slate-900 shrink-0"
               />
-              <div>
+              <div className="min-w-0">
                 <div className="flex items-center space-x-2">
-                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-teal-500/15 text-teal-300 border border-teal-500/30">
+                  <span className="px-2 py-0.5 rounded-full text-[9px] sm:text-[10px] font-bold uppercase tracking-wider bg-teal-500/15 text-teal-300 border border-teal-500/30">
                     {tenant.branding.atoll}
                   </span>
-                  <span className="text-xs text-slate-400 flex items-center space-x-1">
-                    <MapPin className="w-3.5 h-3.5 text-teal-400" />
+                  <span className="text-[11px] sm:text-xs text-slate-400 flex items-center space-x-1">
+                    <MapPin className="w-3 h-3 text-teal-400 shrink-0" />
                     <span>{tenant.branding.island}</span>
                   </span>
                 </div>
-                <h1 className="text-2xl sm:text-4xl font-extrabold text-white mt-1">
+                <h1 className="text-lg sm:text-3xl font-extrabold text-white mt-0.5 sm:mt-1 truncate leading-tight">
                   {tenant.name}
                 </h1>
                 {tenant.branding.taglineEn && !/free trial/i.test(tenant.branding.taglineEn) && (
-                  <p className="text-xs sm:text-sm text-slate-300 mt-1 max-w-2xl">
+                  <p className="text-[11px] sm:text-xs text-slate-300 mt-0.5 max-w-2xl truncate hidden sm:block">
                     {tenant.branding.taglineEn}
                   </p>
                 )}
@@ -227,23 +229,23 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
             </div>
 
             {/* Contact Phone & Viber */}
-            <div className="flex flex-wrap items-center gap-3">
+            <div className="flex flex-wrap items-center gap-1.5 sm:gap-3">
               {tenant.branding.contactPhone && (
                 <a
                   href={`tel:${tenant.branding.contactPhone}`}
-                  className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-xs font-semibold border border-slate-700 transition"
+                  className="flex items-center space-x-1 px-2.5 py-1 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl bg-slate-800/80 hover:bg-slate-700 text-slate-200 text-[11px] sm:text-xs font-semibold border border-slate-700 transition"
                 >
-                  <Phone className="w-3.5 h-3.5 text-teal-400" />
+                  <Phone className="w-3 h-3 text-teal-400" />
                   <span>{tenant.branding.contactPhone}</span>
                 </a>
               )}
               {tenant.branding.contactViber && (
                 <a
                   href={`viber://chat?number=${tenant.branding.contactViber.replace(/\D/g, '')}`}
-                  className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-purple-950/40 hover:bg-purple-900/40 text-purple-300 text-xs font-semibold border border-purple-500/30 transition"
+                  className="flex items-center space-x-1 px-2.5 py-1 sm:px-3 sm:py-2 rounded-lg sm:rounded-xl bg-purple-950/40 hover:bg-purple-900/40 text-purple-300 text-[11px] sm:text-xs font-semibold border border-purple-500/30 transition"
                 >
-                  <MessageSquare className="w-3.5 h-3.5 text-purple-400" />
-                  <span>Viber: {tenant.branding.contactViber}</span>
+                  <MessageSquare className="w-3 h-3 text-purple-400" />
+                  <span>Viber</span>
                 </a>
               )}
             </div>
@@ -252,19 +254,21 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
       </div>
 
       {/* Main Content: Showtimes & Screens */}
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-8">
-        <div>
-          <h2 className="text-xl font-bold text-white flex items-center space-x-2">
-            <Film className="w-5 h-5 text-teal-400" />
-            <span>Currently Screening at {tenant.name}</span>
-          </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Select a showtime to choose seats and reserve tickets instantly.
-          </p>
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 space-y-4 sm:space-y-6">
+        <div className="flex items-center justify-between">
+          <div>
+            <h2 className="text-base sm:text-xl font-bold text-white flex items-center space-x-2">
+              <Film className="w-4 h-4 sm:w-5 sm:h-5 text-teal-400" />
+              <span>Now Screening at {tenant.name}</span>
+            </h2>
+            <p className="text-[11px] sm:text-xs text-slate-400 mt-0.5">
+              Select seats and book tickets instantly online.
+            </p>
+          </div>
         </div>
 
         {/* Screening Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           {groupedSessions.map((session) => {
             const { primaryShowtime: st, movie, hall, screens: sessionScreens, totalAvailableSeats, minPrice } = session;
             const isSharedHall = sessionScreens.length > 1;
@@ -272,7 +276,7 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
             return (
               <div
                 key={st.id}
-                className="glass-panel rounded-2xl overflow-hidden border border-slate-800 hover:border-teal-500/40 transition flex flex-col justify-between"
+                className="glass-panel rounded-2xl overflow-hidden border border-slate-800 hover:border-teal-500/40 transition flex flex-col justify-between shadow-xl"
               >
                 <div>
                   {/* 1. Backdrop Banner & Badges */}
@@ -284,7 +288,8 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-[#0a0f1d] via-[#0a0f1d]/40 to-black/30" />
                     
-                    <div className="absolute top-3 left-3 flex flex-wrap gap-1.5 z-10">
+                    {/* Top Left Badges */}
+                    <div className="absolute top-2.5 left-2.5 flex flex-wrap gap-1.5 z-10">
                       <span className="px-2 py-0.5 rounded-full text-[10px] font-bold uppercase tracking-wider bg-slate-950/80 text-teal-300 border border-teal-500/30 backdrop-blur-sm">
                         {movie?.ageRating}
                       </span>
@@ -296,18 +301,38 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
                       )}
                     </div>
 
-                    {isSharedHall && (
-                      <span className="absolute top-3 right-3 px-2.5 py-0.5 rounded-full text-[10px] font-extrabold bg-teal-500 text-slate-950 shadow-md z-10">
-                        Shared Hall • {sessionScreens.length} Screens
-                      </span>
-                    )}
+                    {/* Top Right Badges & Trailer Button */}
+                    <div className="absolute top-2.5 right-2.5 flex items-center gap-1.5 z-10">
+                      {isSharedHall && (
+                        <span className="px-2 py-0.5 rounded-full text-[10px] font-extrabold bg-teal-500 text-slate-950 shadow-md">
+                          Shared Hall ({sessionScreens.length} Screens)
+                        </span>
+                      )}
+
+                      {/* Trailer Button */}
+                      {movie?.trailerYoutubeUrl && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.preventDefault();
+                            e.stopPropagation();
+                            setSelectedMovieForTrailer(movie);
+                          }}
+                          className="flex items-center space-x-1 px-2.5 py-1 rounded-full bg-rose-600 hover:bg-rose-500 text-white text-[11px] font-bold shadow-lg shadow-rose-600/30 transition active:scale-95 backdrop-blur-sm"
+                          title="Watch Official Trailer"
+                        >
+                          <Play className="w-3 h-3 fill-white" />
+                          <span>Trailer</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
 
                   {/* 2. Movie Header with Theatrical Vertical Poster & Details */}
-                  <div className="p-5 pt-0 relative space-y-3">
-                    <div className="flex items-start space-x-3.5 -mt-10 sm:-mt-12 relative z-20">
+                  <div className="p-4 sm:p-5 pt-0 relative space-y-3">
+                    <div className="flex items-start space-x-3 -mt-9 sm:-mt-12 relative z-20">
                       {/* Vertical 2:3 Movie Poster Artwork */}
-                      <div className="relative w-20 sm:w-24 aspect-[2/3] shrink-0 rounded-xl overflow-hidden border-2 border-slate-700/80 shadow-2xl bg-slate-900 group-hover:border-teal-500/60 transition shadow-black/80">
+                      <div className="relative w-18 sm:w-24 aspect-[2/3] shrink-0 rounded-xl overflow-hidden border-2 border-slate-700/80 shadow-2xl bg-slate-900 group-hover:border-teal-500/60 transition shadow-black/80">
                         <img
                           src={movie?.posterUrl || movie?.backdropUrl}
                           alt={`${movie?.titleEn} poster`}
@@ -317,8 +342,8 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
                       </div>
 
                       {/* Title & Key Specs next to poster */}
-                      <div className="flex-1 pt-10 sm:pt-12 min-w-0">
-                        <h3 className="font-bold text-base sm:text-lg text-white group-hover:text-teal-300 transition truncate leading-snug">
+                      <div className="flex-1 pt-9 sm:pt-12 min-w-0">
+                        <h3 className="font-bold text-sm sm:text-lg text-white group-hover:text-teal-300 transition truncate leading-snug">
                           {movie?.titleEn}
                         </h3>
                         <p className="text-xs text-teal-400 font-dhivehi font-bold mt-0.5 truncate">
@@ -331,7 +356,7 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
                             {movie.genre && movie.genre.length > 0 && (
                               <>
                                 <span>•</span>
-                                <span>{movie.genre.slice(0, 2).join(', ')}</span>
+                                <span className="truncate">{movie.genre.slice(0, 2).join(', ')}</span>
                               </>
                             )}
                           </div>
@@ -339,7 +364,7 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
                       </div>
                     </div>
 
-                    <div className="text-xs text-slate-300 space-y-1 bg-slate-900/60 p-3 rounded-xl border border-slate-800">
+                    <div className="text-xs text-slate-300 space-y-1 bg-slate-900/60 p-2.5 sm:p-3 rounded-xl border border-slate-800">
                       <div className="flex justify-between">
                         <span className="text-slate-400">Date & Slot:</span>
                         <span className="font-mono font-bold text-teal-300">{st.date} @ {st.startTime}</span>
@@ -350,7 +375,7 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
                       </div>
                       <div className="flex justify-between">
                         <span className="text-slate-400">Screen Layout:</span>
-                        <span className="text-slate-200 font-semibold">
+                        <span className="text-slate-200 font-semibold truncate max-w-[170px]">
                           {isSharedHall 
                             ? `Shared Hall (${sessionScreens.length} Screens)` 
                             : sessionScreens[0]?.screenName || 'Screen 1'}
@@ -364,10 +389,10 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
                   </div>
                 </div>
 
-                <div className="p-5 pt-0">
+                <div className="p-4 sm:p-5 pt-0">
                   <Link
                     to={`/book/${st.id}`}
-                    className="w-full flex items-center justify-center space-x-2 py-3 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-teal-500/20 transition"
+                    className="w-full flex items-center justify-center space-x-2 py-3 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-extrabold text-xs shadow-lg shadow-teal-500/20 transition active:scale-95"
                   >
                     <span>Pick Seats & Reserve (From {formatCurrency(minPrice)})</span>
                     <ChevronRight className="w-4 h-4" />
@@ -378,7 +403,7 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
           })}
 
           {groupedSessions.length === 0 && (
-            <div className="col-span-full p-12 text-center glass-panel rounded-2xl border border-slate-800 text-slate-400 text-xs">
+            <div className="col-span-full p-10 text-center glass-panel rounded-2xl border border-slate-800 text-slate-400 text-xs">
               No movie screenings currently scheduled for this cinema. Check back soon!
             </div>
           )}
@@ -386,7 +411,7 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
 
         {/* Custom Cinema Booking Terms */}
         {tenant.branding.terms && !/free trial/i.test(tenant.branding.terms) && (
-          <div className="glass-panel rounded-2xl p-5 border border-slate-800 space-y-2">
+          <div className="glass-panel rounded-2xl p-4 sm:p-5 border border-slate-800 space-y-2">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center space-x-1.5">
               <ShieldCheck className="w-4 h-4 text-teal-400" />
               <span>Cinema Guidelines & Booking Terms</span>
@@ -397,6 +422,56 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
           </div>
         )}
       </div>
+
+      {/* Official YouTube Trailer Modal */}
+      {selectedMovieForTrailer && selectedMovieForTrailer.trailerYoutubeUrl && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-3 sm:p-4 backdrop-blur-md animate-fadeIn"
+          onClick={() => setSelectedMovieForTrailer(null)}
+        >
+          <div 
+            className="bg-slate-900 border border-slate-800 rounded-3xl max-w-3xl w-full p-4 sm:p-6 space-y-4 shadow-2xl"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div className="flex items-center space-x-2">
+                <Play className="w-4 h-4 text-rose-500 fill-rose-500" />
+                <h3 className="font-bold text-white text-sm sm:text-base">
+                  {selectedMovieForTrailer.titleEn} {selectedMovieForTrailer.titleDv ? `(${selectedMovieForTrailer.titleDv})` : ''} - Official Trailer
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedMovieForTrailer(null)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center text-sm transition"
+              >
+                ✕
+              </button>
+            </div>
+            <div className="aspect-video bg-black rounded-2xl overflow-hidden border border-slate-800 shadow-inner">
+              <iframe
+                src={getYouTubeEmbedUrl(selectedMovieForTrailer.trailerYoutubeUrl)}
+                title={`${selectedMovieForTrailer.titleEn} Trailer`}
+                className="w-full h-full"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowFullScreen
+              />
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 text-xs text-slate-400">
+              <span>Having trouble with embedded video playback?</span>
+              <a
+                href={getDirectYouTubeWatchUrl(selectedMovieForTrailer.trailerYoutubeUrl)}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-teal-400 hover:text-teal-300 font-bold underline flex items-center space-x-1"
+              >
+                <span>Watch Directly on YouTube</span>
+                <span>↗</span>
+              </a>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

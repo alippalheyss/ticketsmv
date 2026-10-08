@@ -1,6 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Tenant, Hall, Screen, Movie, Showtime, Booking, BankDetails, SubscriptionModel, TenantRegistrationRequest 
+  Tenant, Hall, Screen, Movie, Showtime, Booking, BankDetails, SubscriptionModel, TenantRegistrationRequest,
+  SeatConfig, BookedSeat
 } from '../types';
 import { cinemaStore } from '../services/store';
 import { useLanguage } from '../context/LanguageContext';
@@ -9,7 +10,8 @@ import {
   Building2, Film, Calendar, Users, Sliders, ExternalLink, Plus, Edit3, 
   Download, DollarSign, Upload, MapPin, Check, Ban, Trash2, LayoutGrid, 
   CreditCard, Sparkles, AlertCircle, AlertTriangle, Copy, Image, Play, CheckCircle2, X, LogOut, Lock, KeyRound,
-  Globe, RefreshCw, Save, Send, ZoomIn, ZoomOut, Maximize2, Eye, Star
+  Globe, RefreshCw, Save, Send, ZoomIn, ZoomOut, Maximize2, Eye, Star,
+  Armchair, ArrowLeftRight, User
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
@@ -140,6 +142,51 @@ export const TenantAdminPage: React.FC = () => {
   const [slotError, setSlotError] = useState('');
   const [isActivatingSlot, setIsActivatingSlot] = useState(false);
 
+  // Showtime filtering for Reports (Attendees) and Slips
+  const [selectedShowtimeForReports, setSelectedShowtimeForReports] = useState<string>('latest');
+  const [selectedShowtimeForSlips, setSelectedShowtimeForSlips] = useState<string>('latest');
+
+  // Interactive Seating Management Modal State
+  const [showSeatingModal, setShowSeatingModal] = useState<boolean>(false);
+  const [selectedShowtimeForSeating, setSelectedShowtimeForSeating] = useState<Showtime | null>(null);
+  const [selectedScreenIdForSeating, setSelectedScreenIdForSeating] = useState<string>('');
+  const [inspectingSeat, setInspectingSeat] = useState<{
+    seatConfig: SeatConfig;
+    bookedSeat?: BookedSeat;
+    booking?: Booking;
+  } | null>(null);
+
+  // Edit attendee details inside Seating Manager
+  const [isEditingGuest, setIsEditingGuest] = useState(false);
+  const [editGuestName, setEditGuestName] = useState('');
+  const [editGuestPhone, setEditGuestPhone] = useState('');
+  const [isSavingGuest, setIsSavingGuest] = useState(false);
+
+  // Exchange seat mode
+  const [isExchangingSeat, setIsExchangingSeat] = useState(false);
+  const [exchangeCandidateSeat, setExchangeCandidateSeat] = useState<SeatConfig | null>(null);
+  const [isExecutingExchange, setIsExecutingExchange] = useState(false);
+
+  // Cancel seat confirmation
+  const [seatCancelConfirmation, setSeatCancelConfirmation] = useState<{
+    booking: Booking;
+    seatId: string;
+    seatLabel: string;
+  } | null>(null);
+  const [isCancellingSeat, setIsCancellingSeat] = useState(false);
+
+  // Walk-in booking state inside seating modal
+  const [showWalkinForm, setShowWalkinForm] = useState(false);
+  const [walkinGuestName, setWalkinGuestName] = useState('');
+  const [walkinGuestPhone, setWalkinGuestPhone] = useState('+960 ');
+  const [isBookingWalkin, setIsBookingWalkin] = useState(false);
+
+  // Feedback toast for seating actions
+  const [seatingFeedback, setSeatingFeedback] = useState<{
+    type: 'success' | 'error' | 'info';
+    message: string;
+  } | null>(null);
+
   // Movie Customization Form State
   const [movieForm, setMovieForm] = useState<Movie>({
     id: '',
@@ -240,6 +287,213 @@ export const TenantAdminPage: React.FC = () => {
     });
     return () => unsub();
   }, [selectedTenantId]);
+
+  // Sorted list of showtimes for the current tenant (latest date/time first)
+  const tenantShowtimes = useMemo(() => {
+    if (!currentTenant) return [];
+    return [...showtimes]
+      .filter((st) => st.tenantId === currentTenant.id)
+      .sort((a, b) => `${b.date} ${b.startTime}`.localeCompare(`${a.date} ${a.startTime}`));
+  }, [showtimes, currentTenant]);
+
+  const latestShowtime = tenantShowtimes[0] || null;
+
+  // Effective showtime selection for Reports
+  const effectiveShowtimeIdForReports = 
+    selectedShowtimeForReports === 'latest' 
+      ? (latestShowtime?.id || 'all') 
+      : selectedShowtimeForReports;
+
+  // Filtered bookings for Reports
+  const reportedBookings = useMemo(() => {
+    if (effectiveShowtimeIdForReports === 'all' || !effectiveShowtimeIdForReports) {
+      return bookings;
+    }
+    return bookings.filter((b) => b.showtimeId === effectiveShowtimeIdForReports);
+  }, [bookings, effectiveShowtimeIdForReports]);
+
+  // Effective showtime selection for Slips
+  const effectiveShowtimeIdForSlips = 
+    selectedShowtimeForSlips === 'latest' 
+      ? (latestShowtime?.id || 'all') 
+      : selectedShowtimeForSlips;
+
+  // Filtered bookings for Slips
+  const slipBookings = useMemo(() => {
+    const allSlips = bookings.filter((b) => b.paymentMethod === 'bml_transfer' || Boolean(b.slipUrl));
+    if (effectiveShowtimeIdForSlips === 'all' || !effectiveShowtimeIdForSlips) {
+      return allSlips;
+    }
+    return allSlips.filter((b) => b.showtimeId === effectiveShowtimeIdForSlips);
+  }, [bookings, effectiveShowtimeIdForSlips]);
+
+  // Open Interactive Seating Management Modal for a Showtime
+  const handleOpenSeatingManagement = (st: Showtime) => {
+    setSelectedShowtimeForSeating(st);
+    setSelectedScreenIdForSeating(st.screenId);
+    setInspectingSeat(null);
+    setIsEditingGuest(false);
+    setIsExchangingSeat(false);
+    setExchangeCandidateSeat(null);
+    setSeatCancelConfirmation(null);
+    setSeatingFeedback(null);
+    setShowWalkinForm(false);
+    setShowSeatingModal(true);
+  };
+
+  // Find booking that occupies a specific seat in the active showtime & screen
+  const findBookingForSeat = (seatId: string, screenId: string) => {
+    if (!selectedShowtimeForSeating) return { booking: undefined, bookedSeat: undefined };
+    for (const b of bookings) {
+      if (b.showtimeId === selectedShowtimeForSeating.id && b.paymentStatus !== 'expired') {
+        const bs = b.seats.find((s) => s.seatId === seatId && (!s.screenId || s.screenId === screenId));
+        if (bs) return { booking: b, bookedSeat: bs };
+      }
+    }
+    return { booking: undefined, bookedSeat: undefined };
+  };
+
+  // Save edited attendee details
+  const handleSaveGuestDetails = async () => {
+    if (!inspectingSeat?.booking) return;
+    setIsSavingGuest(true);
+    try {
+      const ok = await cinemaStore.updateBookingGuestDetails(
+        inspectingSeat.booking.id,
+        editGuestName,
+        editGuestPhone
+      );
+      if (ok) {
+        setInspectingSeat((prev) => prev && prev.booking ? {
+          ...prev,
+          booking: {
+            ...prev.booking,
+            guestName: editGuestName,
+            guestPhone: editGuestPhone
+          }
+        } : null);
+        setIsEditingGuest(false);
+        setSeatingFeedback({
+          type: 'success',
+          message: `Attendee details updated to ${editGuestName} (${editGuestPhone}).`
+        });
+        refreshData();
+      } else {
+        setSeatingFeedback({ type: 'error', message: 'Could not update attendee information.' });
+      }
+    } catch {
+      setSeatingFeedback({ type: 'error', message: 'Error saving attendee details.' });
+    } finally {
+      setIsSavingGuest(false);
+    }
+  };
+
+  // Execute Seat Cancellation & Release
+  const handleExecuteCancelSeat = async () => {
+    if (!seatCancelConfirmation) return;
+    setIsCancellingSeat(true);
+    try {
+      const res = await cinemaStore.cancelBookedSeat(
+        seatCancelConfirmation.booking.id,
+        seatCancelConfirmation.seatId,
+        selectedScreenIdForSeating
+      );
+      if (res.success) {
+        setSeatingFeedback({ type: 'success', message: res.message });
+        setInspectingSeat(null);
+        setSeatCancelConfirmation(null);
+        refreshData();
+      } else {
+        setSeatingFeedback({ type: 'error', message: res.message });
+      }
+    } catch {
+      setSeatingFeedback({ type: 'error', message: 'Error releasing seat.' });
+    } finally {
+      setIsCancellingSeat(false);
+    }
+  };
+
+  // Execute Seat Exchange
+  const handleExecuteExchangeSeat = async (targetSeat: SeatConfig) => {
+    if (!inspectingSeat?.booking || !inspectingSeat?.bookedSeat) return;
+    setIsExecutingExchange(true);
+    try {
+      const price = inspectingSeat.bookedSeat.price || selectedShowtimeForSeating?.priceTiers.standard || 100;
+      const res = await cinemaStore.exchangeBookedSeat(
+        inspectingSeat.booking.id,
+        inspectingSeat.bookedSeat.seatId,
+        {
+          seatId: targetSeat.id,
+          row: targetSeat.row,
+          col: targetSeat.col,
+          label: `${targetSeat.row}${targetSeat.col}`,
+          type: (targetSeat.type === 'vip' || targetSeat.type === 'couple' || targetSeat.type === 'accessible') ? targetSeat.type : 'standard',
+          price,
+          screenId: selectedScreenIdForSeating
+        }
+      );
+      if (res.success) {
+        setSeatingFeedback({
+          type: 'success',
+          message: `Seat exchanged: ${inspectingSeat.bookedSeat.label} → ${targetSeat.row}${targetSeat.col} for ${inspectingSeat.booking.guestName}.`
+        });
+        setIsExchangingSeat(false);
+        setExchangeCandidateSeat(null);
+        setInspectingSeat(null);
+        refreshData();
+      } else {
+        setSeatingFeedback({ type: 'error', message: res.message });
+      }
+    } catch {
+      setSeatingFeedback({ type: 'error', message: 'Failed to exchange seat.' });
+    } finally {
+      setIsExecutingExchange(false);
+    }
+  };
+
+  // Walk-in booking from seating modal
+  const handleCreateWalkin = async (seatConfig: SeatConfig) => {
+    if (!selectedShowtimeForSeating || !currentTenant) return;
+    setIsBookingWalkin(true);
+    try {
+      const price = seatConfig.type === 'vip'
+        ? selectedShowtimeForSeating.priceTiers.vip
+        : selectedShowtimeForSeating.priceTiers.standard;
+      const seatObj: BookedSeat = {
+        seatId: seatConfig.id,
+        row: seatConfig.row,
+        col: seatConfig.col,
+        label: `${seatConfig.row}${seatConfig.col}`,
+        type: seatConfig.type,
+        price,
+        screenId: selectedScreenIdForSeating
+      };
+      const res = await cinemaStore.adminCreateWalkinBooking(
+        selectedShowtimeForSeating.id,
+        [seatObj],
+        walkinGuestName.trim() || 'Walk-in Guest',
+        walkinGuestPhone.trim() || '+960 777-0000',
+        currentTenant.id
+      );
+      if (res.success) {
+        setSeatingFeedback({
+          type: 'success',
+          message: `Seat ${seatObj.label} booked for ${walkinGuestName.trim() || 'Walk-in Guest'}.`
+        });
+        setShowWalkinForm(false);
+        setWalkinGuestName('');
+        setWalkinGuestPhone('+960 ');
+        setInspectingSeat(null);
+        refreshData();
+      } else {
+        setSeatingFeedback({ type: 'error', message: res.error || 'Failed to book seat.' });
+      }
+    } catch {
+      setSeatingFeedback({ type: 'error', message: 'Error creating walk-in booking.' });
+    } finally {
+      setIsBookingWalkin(false);
+    }
+  };
 
   // Dirty state: automatically true when brandingForm or bankForm has unsaved modifications
   const isDirty = Boolean(
@@ -690,10 +944,10 @@ export const TenantAdminPage: React.FC = () => {
     }
   };
 
-  // Export Attendees to CSV
+  // Export Attendees to CSV (respects showtime filter)
   const handleExportCSV = () => {
     const headers = ['Booking Ref', 'Guest Name', 'Email', 'Phone', 'Seats', 'Total (MVR)', 'Payment Status', 'Gate Checked In'];
-    const rows = bookings.map((b) => [
+    const rows = reportedBookings.map((b) => [
       b.bookingRef,
       `"${b.guestName}"`,
       b.guestEmail,
@@ -1306,24 +1560,40 @@ export const TenantAdminPage: React.FC = () => {
       {/* TAB 3: SHOWTIME SCHEDULER (WITH CANCEL AND DELETE BUTTONS) */}
       {activeTab === 'scheduler' && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h2 className="text-lg font-bold text-white">Showtimes & Screenings</h2>
+              <h2 className="text-lg font-bold text-white flex items-center space-x-2">
+                <Calendar className="w-5 h-5 text-teal-400" />
+                <span>Showtimes & Screenings</span>
+              </h2>
               <p className="text-xs text-slate-400">
-                Schedule shows, cancel screenings, or delete unneeded showtimes.
+                Schedule shows, inspect attendee seat bookings, exchange seats, or cancel showtimes.
               </p>
             </div>
-            <button
-              onClick={() => {
-                if (movies.length > 0) setNewShowMovieId(movies[0].id);
-                if (screens.length > 0) setNewShowScreenId(screens[0].id);
-                setShowAddShowtimeModal(true);
-              }}
-              className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md transition"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Schedule Showtime</span>
-            </button>
+            <div className="flex items-center space-x-2 self-start sm:self-auto">
+              {latestShowtime && (
+                <button
+                  type="button"
+                  onClick={() => handleOpenSeatingManagement(latestShowtime)}
+                  className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 text-teal-300 font-bold text-xs border border-teal-500/30 transition shadow-sm"
+                  title="Inspect Seating & Attendee Details for the latest show"
+                >
+                  <Armchair className="w-4 h-4 text-teal-400" />
+                  <span>Inspect Live Seating</span>
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (movies.length > 0) setNewShowMovieId(movies[0].id);
+                  if (screens.length > 0) setNewShowScreenId(screens[0].id);
+                  setShowAddShowtimeModal(true);
+                }}
+                className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md transition"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Schedule Showtime</span>
+              </button>
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -1371,22 +1641,33 @@ export const TenantAdminPage: React.FC = () => {
                     </div>
                   </div>
 
-                  {/* Cancel & Delete Action Buttons */}
+                  {/* Seating Inspection, Cancel & Delete Action Buttons */}
                   <div className="flex items-center space-x-2 pt-2 border-t border-slate-800/80">
+                    <button
+                      type="button"
+                      onClick={() => handleOpenSeatingManagement(st)}
+                      className="flex-1 py-1.5 px-2 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/30 text-center text-xs font-bold text-teal-300 transition flex items-center justify-center space-x-1"
+                    >
+                      <Armchair className="w-3.5 h-3.5 text-teal-400" />
+                      <span>Manage Seating</span>
+                    </button>
+
                     <Link
                       to={`/book/${st.id}`}
-                      className="flex-1 py-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-center text-xs font-semibold text-teal-300 transition"
+                      target="_blank"
+                      className="p-1.5 rounded-lg bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white transition"
+                      title="Preview Public Booking Page"
                     >
-                      View Seat Map
+                      <ExternalLink className="w-3.5 h-3.5" />
                     </Link>
 
                     {!isCancelled && (
                       <button
                         onClick={() => handleCancelShowtime(st.id)}
-                        className="px-3 py-1.5 rounded-lg bg-slate-800 hover:bg-amber-950/60 text-amber-400 text-xs font-semibold border border-amber-500/30 transition"
+                        className="px-2.5 py-1.5 rounded-lg bg-slate-800 hover:bg-amber-950/60 text-amber-400 text-xs font-semibold border border-amber-500/30 transition"
                         title="Cancel this showtime"
                       >
-                        Cancel Show
+                        Cancel
                       </button>
                     )}
 
@@ -2144,57 +2425,160 @@ export const TenantAdminPage: React.FC = () => {
       {/* TAB 5: SALES & ATTENDEE REPORTS */}
       {activeTab === 'sales' && (
         <div className="space-y-6">
-          <div className="flex items-center justify-between">
-            <h2 className="text-lg font-bold text-white">Attendee & Ticket Sales</h2>
-            <button
-              onClick={handleExportCSV}
-              className="flex items-center space-x-2 px-4 py-2 rounded-xl bg-teal-500 text-slate-950 font-bold text-xs"
-            >
-              <Download className="w-4 h-4" />
-              <span>Export CSV</span>
-            </button>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div>
+              <h2 className="text-lg font-bold text-white flex items-center space-x-2">
+                <Users className="w-5 h-5 text-teal-400" />
+                <span>Attendee & Ticket Sales Reports</span>
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Inspect booking records, guest attendees, ticket revenue, and export show summaries.
+              </p>
+            </div>
           </div>
 
+          {/* Showtime Selection Filter & Export Bar */}
+          <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center space-x-1.5">
+                <Calendar className="w-3.5 h-3.5 text-teal-400" />
+                <span>Showtime Filter:</span>
+              </label>
+              <select
+                value={selectedShowtimeForReports}
+                onChange={(e) => setSelectedShowtimeForReports(e.target.value)}
+                className="w-full sm:max-w-lg px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-semibold focus:border-teal-400 focus:outline-none"
+              >
+                {latestShowtime && (
+                  <option value="latest">
+                    ★ Latest / Active Show ({movies.find(m => m.id === latestShowtime.movieId)?.titleEn || 'Show'} • {latestShowtime.date} @ {latestShowtime.startTime})
+                  </option>
+                )}
+                <option value="all">All Shows (Combined All-Time History)</option>
+                {tenantShowtimes.map((st) => {
+                  const mv = movies.find(m => m.id === st.movieId);
+                  const sc = screens.find(s => s.id === st.screenId);
+                  return (
+                    <option key={st.id} value={st.id}>
+                      {mv?.titleEn || 'Movie'} • {st.date} @ {st.startTime} ({sc?.screenName || 'Screen'})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <div className="flex items-center space-x-2 shrink-0 self-start sm:self-end">
+              {effectiveShowtimeIdForReports !== 'all' && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    const targetSt = tenantShowtimes.find(s => s.id === effectiveShowtimeIdForReports);
+                    if (targetSt) handleOpenSeatingManagement(targetSt);
+                  }}
+                  className="flex items-center space-x-1.5 px-3 py-2 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/30 text-teal-300 font-bold text-xs transition shadow-sm"
+                  title="Inspect Seating & Attendee Grid for this show"
+                >
+                  <Armchair className="w-3.5 h-3.5 text-teal-400" />
+                  <span>Inspect Seating</span>
+                </button>
+              )}
+
+              <button
+                onClick={handleExportCSV}
+                className="flex items-center space-x-1.5 px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-md transition"
+              >
+                <Download className="w-4 h-4" />
+                <span>Export CSV</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Quick Metrics Cards for Current Filter */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800">
+              <span className="text-[11px] text-slate-400 block">Total Orders</span>
+              <span className="text-lg font-black text-white">{reportedBookings.length}</span>
+            </div>
+            <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800">
+              <span className="text-[11px] text-slate-400 block">Seats Reserved</span>
+              <span className="text-lg font-black text-teal-400">
+                {reportedBookings.reduce((sum, b) => sum + (b.paymentStatus !== 'expired' ? b.seats.length : 0), 0)}
+              </span>
+            </div>
+            <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800">
+              <span className="text-[11px] text-slate-400 block">Gross Sales</span>
+              <span className="text-lg font-black text-emerald-400 font-mono">
+                {formatCurrency(reportedBookings.filter(b => b.paymentStatus === 'paid').reduce((sum, b) => sum + b.totalAmount, 0))}
+              </span>
+            </div>
+            <div className="p-3.5 rounded-2xl bg-slate-900/80 border border-slate-800">
+              <span className="text-[11px] text-slate-400 block">Pending Verification</span>
+              <span className="text-lg font-black text-amber-300">
+                {reportedBookings.filter(b => b.paymentStatus === 'pending_verification').length}
+              </span>
+            </div>
+          </div>
+
+          {/* Attendee Booking Table */}
           <div className="glass-panel rounded-2xl border border-slate-800 overflow-hidden">
-            <table className="w-full text-left text-xs text-slate-300">
-              <thead className="bg-slate-900/90 text-slate-400 font-semibold uppercase text-[11px] border-b border-slate-800">
-                <tr>
-                  <th className="px-4 py-3">Ref</th>
-                  <th className="px-4 py-3">Guest</th>
-                  <th className="px-4 py-3">Mobile No</th>
-                  <th className="px-4 py-3">Seats</th>
-                  <th className="px-4 py-3">Amount</th>
-                  <th className="px-4 py-3">Payment</th>
-                  <th className="px-4 py-3">Receipt Slip</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {bookings.map((b) => (
-                  <tr key={b.id} className="hover:bg-slate-900/40 transition">
-                    <td className="px-4 py-3 font-mono font-bold text-teal-400">{b.bookingRef}</td>
-                    <td className="px-4 py-3 font-bold text-white">{b.guestName}</td>
-                    <td className="px-4 py-3 font-mono text-cyan-300 font-semibold">{b.guestPhone || '+960 777-1234'}</td>
-                    <td className="px-4 py-3">{b.seats.map(s => s.label).join(', ')}</td>
-                    <td className="px-4 py-3 font-bold">{formatCurrency(b.totalAmount)}</td>
-                    <td className="px-4 py-3 font-semibold text-emerald-400">{b.paymentStatus}</td>
-                    <td className="px-4 py-3">
-                      {b.slipUrl ? (
-                        <button
-                          type="button"
-                          onClick={() => { setSelectedSlipBooking(b); setSlipZoom(1); }}
-                          className="px-2.5 py-1 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/30 text-teal-300 font-bold text-[11px] flex items-center space-x-1 transition"
-                        >
-                          <Eye className="w-3 h-3 text-teal-400" />
-                          <span>View Slip</span>
-                        </button>
-                      ) : (
-                        <span className="text-slate-600 text-[11px] italic">None</span>
-                      )}
-                    </td>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs text-slate-300">
+                <thead className="bg-slate-900/90 text-slate-400 font-semibold uppercase text-[11px] border-b border-slate-800">
+                  <tr>
+                    <th className="px-4 py-3">Ref</th>
+                    <th className="px-4 py-3">Guest Name</th>
+                    <th className="px-4 py-3">Mobile No</th>
+                    <th className="px-4 py-3">Seats</th>
+                    <th className="px-4 py-3">Amount</th>
+                    <th className="px-4 py-3">Payment</th>
+                    <th className="px-4 py-3">Slip Receipt</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {reportedBookings.map((b) => (
+                    <tr key={b.id} className="hover:bg-slate-900/40 transition">
+                      <td className="px-4 py-3 font-mono font-bold text-teal-400">{b.bookingRef}</td>
+                      <td className="px-4 py-3 font-bold text-white">{b.guestName}</td>
+                      <td className="px-4 py-3 font-mono text-cyan-300 font-semibold">{b.guestPhone || '+960 777-1234'}</td>
+                      <td className="px-4 py-3 font-semibold text-slate-200">{b.seats.map(s => s.label).join(', ')}</td>
+                      <td className="px-4 py-3 font-bold">{formatCurrency(b.totalAmount)}</td>
+                      <td className="px-4 py-3 font-semibold">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase ${
+                          b.paymentStatus === 'paid'
+                            ? 'bg-emerald-500/20 text-emerald-300'
+                            : b.paymentStatus === 'pending_verification'
+                            ? 'bg-amber-500/20 text-amber-300'
+                            : 'bg-rose-500/20 text-rose-300'
+                        }`}>
+                          {b.paymentStatus}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        {b.slipUrl ? (
+                          <button
+                            type="button"
+                            onClick={() => { setSelectedSlipBooking(b); setSlipZoom(1); }}
+                            className="px-2.5 py-1 rounded-lg bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/30 text-teal-300 font-bold text-[11px] flex items-center space-x-1 transition"
+                          >
+                            <Eye className="w-3 h-3 text-teal-400" />
+                            <span>View Slip</span>
+                          </button>
+                        ) : (
+                          <span className="text-slate-600 text-[11px] italic">None</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                  {reportedBookings.length === 0 && (
+                    <tr>
+                      <td colSpan={7} className="px-4 py-8 text-center text-slate-400 text-xs italic">
+                        No bookings found for the selected showtime filter.
+                      </td>
+                    </tr>
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
@@ -2204,18 +2588,56 @@ export const TenantAdminPage: React.FC = () => {
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
             <div>
-              <h2 className="text-lg font-bold text-white">Bank Transfer Slips Inspection & Approval</h2>
+              <h2 className="text-lg font-bold text-white flex items-center space-x-2">
+                <CreditCard className="w-5 h-5 text-teal-400" />
+                <span>Bank Transfer Slips Inspection & Approval</span>
+              </h2>
               <p className="text-xs text-slate-400 mt-0.5">
                 Review guest BML/MIB transfer receipts in full resolution, inspect transaction references, and approve tickets.
               </p>
             </div>
             <span className="px-3 py-1 rounded-full bg-amber-500/10 border border-amber-500/30 text-amber-300 text-xs font-semibold self-start sm:self-auto">
-              {bookings.filter(b => b.paymentStatus === 'pending_verification').length} Pending Slips
+              {slipBookings.filter(b => b.paymentStatus === 'pending_verification').length} Pending Slips in Filter
             </span>
           </div>
 
+          {/* Showtime Selection Filter Bar for Slips */}
+          <div className="p-4 rounded-2xl bg-slate-900/90 border border-slate-800 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex-1 min-w-0">
+              <label className="block text-xs font-bold text-slate-300 mb-1 flex items-center space-x-1.5">
+                <Calendar className="w-3.5 h-3.5 text-teal-400" />
+                <span>Showtime Filter for Slips:</span>
+              </label>
+              <select
+                value={selectedShowtimeForSlips}
+                onChange={(e) => setSelectedShowtimeForSlips(e.target.value)}
+                className="w-full sm:max-w-lg px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-semibold focus:border-teal-400 focus:outline-none"
+              >
+                {latestShowtime && (
+                  <option value="latest">
+                    ★ Latest / Active Show ({movies.find(m => m.id === latestShowtime.movieId)?.titleEn || 'Show'} • {latestShowtime.date} @ {latestShowtime.startTime})
+                  </option>
+                )}
+                <option value="all">All Shows (All Bank Transfer Slips)</option>
+                {tenantShowtimes.map((st) => {
+                  const mv = movies.find(m => m.id === st.movieId);
+                  const sc = screens.find(s => s.id === st.screenId);
+                  return (
+                    <option key={st.id} value={st.id}>
+                      {mv?.titleEn || 'Movie'} • {st.date} @ {st.startTime} ({sc?.screenName || 'Screen'})
+                    </option>
+                  );
+                })}
+              </select>
+            </div>
+
+            <div className="text-xs text-slate-400 shrink-0">
+              Showing <strong className="text-white">{slipBookings.length}</strong> receipt slips
+            </div>
+          </div>
+
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {bookings.filter(b => b.paymentMethod === 'bml_transfer' || Boolean(b.slipUrl)).map((b) => (
+            {slipBookings.map((b) => (
               <div key={b.id} className="glass-panel rounded-2xl p-4 border border-slate-800 space-y-3">
                 <div className="flex justify-between items-center">
                   <span className="font-mono font-bold text-amber-400">{b.bookingRef}</span>
@@ -2305,6 +2727,12 @@ export const TenantAdminPage: React.FC = () => {
                 )}
               </div>
             ))}
+
+            {slipBookings.length === 0 && (
+              <div className="col-span-full p-10 text-center glass-panel rounded-2xl border border-slate-800 text-slate-400 text-xs italic">
+                No bank transfer slips recorded for this selected showtime.
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -3336,6 +3764,635 @@ export const TenantAdminPage: React.FC = () => {
                   </button>
                 </div>
               )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: INTERACTIVE SEATING & ATTENDEE CONTROLS */}
+      {showSeatingModal && selectedShowtimeForSeating && (() => {
+        const currentScreen = screens.find((s) => s.id === selectedScreenIdForSeating) || screens[0];
+        const currentMovie = movies.find((m) => m.id === selectedShowtimeForSeating.movieId);
+        const currentHall = halls.find((h) => h.id === selectedShowtimeForSeating.hallId);
+
+        // All seats in this screen's layout
+        const screenSeats = currentScreen?.layout?.seats || [];
+        const rowLabels = currentScreen?.layout?.rowLabels || Array.from(new Set(screenSeats.map(s => s.row)));
+
+        // Calculate booked vs available
+        let bookedSeatsCount = 0;
+        let totalActiveSeats = 0;
+        screenSeats.forEach((s) => {
+          if (s.active && s.type !== 'aisle' && s.type !== 'space') {
+            totalActiveSeats++;
+            const { booking } = findBookingForSeat(s.id, selectedScreenIdForSeating);
+            if (booking) bookedSeatsCount++;
+          }
+        });
+        const availableSeatsCount = Math.max(0, totalActiveSeats - bookedSeatsCount);
+
+        // List of all open seats for quick exchange dropdown
+        const openSeatsList = screenSeats.filter((s) => {
+          if (!s.active || s.type === 'aisle' || s.type === 'space') return false;
+          const { booking } = findBookingForSeat(s.id, selectedScreenIdForSeating);
+          return !booking;
+        });
+
+        return (
+          <div 
+            className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-2 sm:p-4 backdrop-blur-md overflow-y-auto"
+            onClick={() => {
+              if (!isCancellingSeat && !isExecutingExchange) {
+                setShowSeatingModal(false);
+              }
+            }}
+          >
+            <div 
+              className="bg-slate-900 border border-slate-700 rounded-3xl max-w-5xl w-full p-4 sm:p-6 space-y-4 shadow-2xl relative my-auto max-h-[94vh] flex flex-col overflow-hidden"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {/* Header */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2.5 rounded-xl bg-teal-500/10 text-teal-400 border border-teal-500/20 shrink-0">
+                    <Armchair className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <div className="flex items-center space-x-2">
+                      <h3 className="text-base sm:text-lg font-bold text-white">
+                        {currentMovie?.titleEn || 'Movie'} Seating Manager
+                      </h3>
+                      <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold uppercase bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                        {selectedShowtimeForSeating.date} @ {selectedShowtimeForSeating.startTime}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-400">
+                      {currentHall?.name} • {currentScreen?.screenName}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center space-x-2 self-end sm:self-auto">
+                  {/* Showtime Selector to switch on the fly */}
+                  <select
+                    value={selectedShowtimeForSeating.id}
+                    onChange={(e) => {
+                      const st = showtimes.find((s) => s.id === e.target.value);
+                      if (st) {
+                        setSelectedShowtimeForSeating(st);
+                        setSelectedScreenIdForSeating(st.screenId);
+                        setInspectingSeat(null);
+                        setIsEditingGuest(false);
+                        setIsExchangingSeat(false);
+                      }
+                    }}
+                    className="px-2.5 py-1.5 rounded-xl bg-slate-950 border border-slate-700 text-xs text-white font-semibold focus:border-teal-400 focus:outline-none"
+                    title="Switch Showtime"
+                  >
+                    {tenantShowtimes.map((st) => {
+                      const mv = movies.find(m => m.id === st.movieId);
+                      return (
+                        <option key={st.id} value={st.id}>
+                          {mv?.titleEn || 'Show'} ({st.date} @ {st.startTime})
+                        </option>
+                      );
+                    })}
+                  </select>
+
+                  {/* Close button */}
+                  <button
+                    type="button"
+                    onClick={() => setShowSeatingModal(false)}
+                    className="p-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white transition"
+                  >
+                    <X className="w-5 h-5" />
+                  </button>
+                </div>
+              </div>
+
+              {/* Feedback toast banner */}
+              {seatingFeedback && (
+                <div className={`p-3 rounded-xl text-xs font-bold flex items-center justify-between animate-fadeIn ${
+                  seatingFeedback.type === 'success'
+                    ? 'bg-emerald-500/15 border border-emerald-500/40 text-emerald-300'
+                    : seatingFeedback.type === 'error'
+                    ? 'bg-rose-500/15 border border-rose-500/40 text-rose-300'
+                    : 'bg-teal-500/15 border border-teal-500/40 text-teal-300'
+                }`}>
+                  <div className="flex items-center space-x-2">
+                    {seatingFeedback.type === 'success' ? (
+                      <Check className="w-4 h-4 text-emerald-400" />
+                    ) : (
+                      <AlertCircle className="w-4 h-4 text-rose-400" />
+                    )}
+                    <span>{seatingFeedback.message}</span>
+                  </div>
+                  <button onClick={() => setSeatingFeedback(null)} className="text-slate-400 hover:text-white">✕</button>
+                </div>
+              )}
+
+              {/* Top Stats & Screen Switcher Strip */}
+              <div className="flex flex-wrap items-center justify-between gap-2 bg-slate-950/80 p-3 rounded-2xl border border-slate-800 shrink-0">
+                <div className="flex items-center space-x-4 text-xs">
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Total Seats:</span>
+                    <span className="font-bold text-white">{totalActiveSeats}</span>
+                  </div>
+                  <div className="h-6 w-px bg-slate-800" />
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Occupied:</span>
+                    <span className="font-bold text-teal-400">{bookedSeatsCount}</span>
+                  </div>
+                  <div className="h-6 w-px bg-slate-800" />
+                  <div>
+                    <span className="text-slate-400 block text-[10px]">Available:</span>
+                    <span className="font-bold text-emerald-400">{availableSeatsCount}</span>
+                  </div>
+                </div>
+
+                {/* Multiple screens tabs if shared hall */}
+                {screens.filter(s => s.hallId === selectedShowtimeForSeating.hallId).length > 1 && (
+                  <div className="flex items-center space-x-1.5">
+                    <span className="text-[11px] text-slate-400">Screen:</span>
+                    {screens.filter(s => s.hallId === selectedShowtimeForSeating.hallId).map((scr) => (
+                      <button
+                        key={scr.id}
+                        type="button"
+                        onClick={() => {
+                          setSelectedScreenIdForSeating(scr.id);
+                          setInspectingSeat(null);
+                        }}
+                        className={`px-2.5 py-1 rounded-lg text-xs font-bold transition ${
+                          selectedScreenIdForSeating === scr.id
+                            ? 'bg-teal-500 text-slate-950 shadow-sm'
+                            : 'bg-slate-900 text-slate-400 hover:text-white border border-slate-800'
+                        }`}
+                      >
+                        {scr.screenName}
+                      </button>
+                    ))}
+                  </div>
+                )}
+
+                {/* Legend */}
+                <div className="flex items-center space-x-3 text-[11px]">
+                  <div className="flex items-center space-x-1">
+                    <span className="w-3 h-3 rounded bg-slate-800 border border-slate-700" />
+                    <span className="text-slate-400">Available</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <span className="w-3 h-3 rounded bg-teal-600 border border-teal-500" />
+                    <span className="text-teal-300 font-semibold">Booked</span>
+                  </div>
+                  <div className="flex items-center space-x-1">
+                    <span className="w-3 h-3 rounded bg-amber-500/40 border border-amber-500/80" />
+                    <span className="text-amber-300 font-semibold">Pending Slip</span>
+                  </div>
+                  {isExchangingSeat && (
+                    <div className="flex items-center space-x-1 text-emerald-300 animate-pulse font-bold">
+                      <span className="w-3 h-3 rounded bg-emerald-500/30 border-2 border-emerald-400" />
+                      <span>Target Swap</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Exchange mode notice */}
+              {isExchangingSeat && inspectingSeat?.bookedSeat && (
+                <div className="p-3 rounded-2xl bg-gradient-to-r from-amber-500/20 via-teal-500/20 to-emerald-500/20 border-2 border-emerald-400/60 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-fadeIn">
+                  <div className="flex items-center space-x-2">
+                    <ArrowLeftRight className="w-4 h-4 text-emerald-400 shrink-0" />
+                    <div>
+                      <span className="font-extrabold text-white">
+                        Exchange Mode Active for Seat {inspectingSeat.bookedSeat.label} ({inspectingSeat.booking?.guestName})
+                      </span>
+                      <p className="text-[11px] text-slate-300">
+                        Click any empty (dark/pulsing) seat on the grid, or pick from the list below to complete the seat transfer.
+                      </p>
+                    </div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsExchangingSeat(false);
+                      setExchangeCandidateSeat(null);
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-bold transition self-start sm:self-auto"
+                  >
+                    Cancel Exchange
+                  </button>
+                </div>
+              )}
+
+              {/* Main Content Area: Seat Grid + Attendee Inspector */}
+              <div className="flex-1 overflow-y-auto space-y-4 pr-1">
+                {/* 1. SEATING MATRIX VIEWPORT */}
+                <div className="p-4 sm:p-6 rounded-2xl bg-slate-950/90 border border-slate-800/90 space-y-5">
+                  {/* Screen Projection Indicator */}
+                  <div className="max-w-lg mx-auto text-center space-y-1">
+                    <div className="h-2 w-full bg-gradient-to-r from-transparent via-teal-400 to-transparent rounded-full shadow-lg shadow-teal-500/30" />
+                    <span className="text-[10px] font-mono font-bold tracking-widest text-slate-500 uppercase">
+                      ▲ SCREEN / PROJECTION STAGE ▲
+                    </span>
+                  </div>
+
+                  {/* Grid Rows */}
+                  <div className="flex flex-col items-center space-y-2 py-2 overflow-x-auto min-w-full">
+                    {rowLabels.map((rowLabel) => {
+                      const rowSeats = screenSeats.filter((s) => s.row === rowLabel).sort((a, b) => a.col - b.col);
+
+                      return (
+                        <div key={rowLabel} className="flex items-center space-x-1.5 sm:space-x-2">
+                          {/* Row letter badge */}
+                          <span className="w-5 text-center font-mono font-bold text-xs text-slate-500 select-none">
+                            {rowLabel}
+                          </span>
+
+                          <div className="flex items-center space-x-1 sm:space-x-1.5">
+                            {rowSeats.map((seat) => {
+                              if (!seat.active || seat.type === 'aisle' || seat.type === 'space') {
+                                return <div key={seat.id} className="w-7 h-7 sm:w-9 sm:h-9" />;
+                              }
+
+                              const { booking, bookedSeat } = findBookingForSeat(seat.id, selectedScreenIdForSeating);
+                              const isOccupied = Boolean(booking);
+                              const isPendingSlip = booking?.paymentStatus === 'pending_verification';
+                              const isSelectedForInspection = inspectingSeat?.seatConfig.id === seat.id;
+                              const isTargetSwap = isExchangingSeat && !isOccupied;
+
+                              return (
+                                <button
+                                  key={seat.id}
+                                  type="button"
+                                  onClick={() => {
+                                    if (isExchangingSeat) {
+                                      if (isOccupied) {
+                                        setSeatingFeedback({
+                                          type: 'error',
+                                          message: `Seat ${seat.row}${seat.col} is already occupied by ${booking?.guestName}. Please select an open seat.`
+                                        });
+                                      } else {
+                                        handleExecuteExchangeSeat(seat);
+                                      }
+                                      return;
+                                    }
+
+                                    // View / inspect seat
+                                    setInspectingSeat({
+                                      seatConfig: seat,
+                                      bookedSeat,
+                                      booking
+                                    });
+                                    setIsEditingGuest(false);
+                                    setIsExchangingSeat(false);
+                                    setExchangeCandidateSeat(null);
+                                    setSeatCancelConfirmation(null);
+                                    if (booking) {
+                                      setEditGuestName(booking.guestName || '');
+                                      setEditGuestPhone(booking.guestPhone || '');
+                                    }
+                                  }}
+                                  title={
+                                    isOccupied
+                                      ? `${seat.row}${seat.col}: Booked by ${booking?.guestName} (${booking?.guestPhone}) [${booking?.bookingRef}]`
+                                      : `${seat.row}${seat.col}: Available (${seat.type})`
+                                  }
+                                  className={`w-7 h-7 sm:w-9 sm:h-9 rounded-lg flex flex-col items-center justify-center text-[10px] sm:text-xs font-bold transition duration-150 select-none ${
+                                    isSelectedForInspection
+                                      ? 'ring-2 ring-white scale-110 z-10 shadow-lg'
+                                      : ''
+                                  } ${
+                                    isTargetSwap
+                                      ? 'bg-emerald-500/25 hover:bg-emerald-500/40 text-emerald-300 border-2 border-emerald-400 animate-pulse hover:scale-105'
+                                      : isOccupied
+                                      ? isPendingSlip
+                                        ? 'bg-amber-500/30 text-amber-200 border border-amber-500/50 hover:border-amber-400'
+                                        : 'bg-teal-600 text-white border border-teal-500 hover:bg-teal-500'
+                                      : 'bg-slate-900/90 hover:bg-slate-800 text-slate-400 hover:text-white border border-slate-800'
+                                  }`}
+                                >
+                                  <span>{seat.row}{seat.col}</span>
+                                </button>
+                              );
+                            })}
+                          </div>
+
+                          <span className="w-5 text-center font-mono font-bold text-xs text-slate-500 select-none">
+                            {rowLabel}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* 2. ATTENDEE & SEAT INSPECTOR DRAWER */}
+                {inspectingSeat ? (
+                  <div className="p-4 sm:p-5 rounded-2xl bg-slate-900 border border-slate-700/80 space-y-4 shadow-xl animate-fadeIn">
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+                      <div className="flex items-center space-x-3">
+                        <div className={`p-2.5 rounded-xl ${
+                          inspectingSeat.booking
+                            ? 'bg-teal-500/15 text-teal-400 border border-teal-500/30'
+                            : 'bg-slate-800 text-slate-400 border border-slate-700'
+                        }`}>
+                          <Armchair className="w-5 h-5" />
+                        </div>
+                        <div>
+                          <div className="flex items-center space-x-2">
+                            <h4 className="font-bold text-base text-white">
+                              Seat {inspectingSeat.seatConfig.row}{inspectingSeat.seatConfig.col}
+                            </h4>
+                            <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-slate-800 text-slate-300">
+                              {inspectingSeat.seatConfig.type}
+                            </span>
+                            {inspectingSeat.booking ? (
+                              <span className={`px-2 py-0.5 rounded text-[10px] uppercase font-bold ${
+                                inspectingSeat.booking.paymentStatus === 'paid'
+                                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                                  : 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                              }`}>
+                                {inspectingSeat.booking.paymentStatus}
+                              </span>
+                            ) : (
+                              <span className="px-2 py-0.5 rounded text-[10px] uppercase font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                                Available
+                              </span>
+                            )}
+                          </div>
+                          {inspectingSeat.booking && (
+                            <p className="text-xs text-slate-400 mt-0.5 font-mono">
+                              Booking Ref: <strong className="text-teal-400">{inspectingSeat.booking.bookingRef}</strong> • Total Paid: {formatCurrency(inspectingSeat.booking.totalAmount)}
+                            </p>
+                          )}
+                        </div>
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={() => setInspectingSeat(null)}
+                        className="text-xs text-slate-400 hover:text-white"
+                      >
+                        ✕ Close Inspector
+                      </button>
+                    </div>
+
+                    {/* Occupied Seat: Guest Info & Controls */}
+                    {inspectingSeat.booking ? (
+                      <div className="space-y-4">
+                        {!isEditingGuest ? (
+                          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3.5 rounded-xl bg-slate-950/80 border border-slate-800 text-xs">
+                            <div>
+                              <span className="text-slate-400 block text-[11px]">Guest Full Name:</span>
+                              <span className="font-bold text-white text-sm">{inspectingSeat.booking.guestName}</span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[11px]">Contact Mobile Phone:</span>
+                              <span className="font-mono font-bold text-cyan-300 text-sm">
+                                {inspectingSeat.booking.guestPhone || 'No phone recorded'}
+                              </span>
+                            </div>
+                            <div>
+                              <span className="text-slate-400 block text-[11px]">Email Address:</span>
+                              <span className="font-medium text-slate-300 truncate block">
+                                {inspectingSeat.booking.guestEmail || 'Not provided'}
+                              </span>
+                            </div>
+                          </div>
+                        ) : (
+                          /* Edit Guest Name & Phone Form */
+                          <div className="p-4 rounded-xl bg-slate-950 border border-teal-500/40 space-y-3">
+                            <span className="text-xs font-bold text-teal-300 block">
+                              Edit Attendee Details for Seat {inspectingSeat.seatConfig.row}{inspectingSeat.seatConfig.col}
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-300 mb-1">Guest Full Name *</label>
+                                <input
+                                  type="text"
+                                  value={editGuestName}
+                                  onChange={(e) => setEditGuestName(e.target.value)}
+                                  placeholder="e.g. Ahmed Ali"
+                                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:border-teal-400 focus:outline-none"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-300 mb-1">Mobile Phone Number *</label>
+                                <input
+                                  type="tel"
+                                  value={editGuestPhone}
+                                  onChange={(e) => setEditGuestPhone(e.target.value)}
+                                  placeholder="e.g. +960 777-1234"
+                                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-mono focus:border-teal-400 focus:outline-none"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-end space-x-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => setIsEditingGuest(false)}
+                                className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs font-semibold"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isSavingGuest}
+                                onClick={handleSaveGuestDetails}
+                                className="px-4 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold transition shadow-sm"
+                              >
+                                {isSavingGuest ? 'Saving...' : 'Save Updated Details'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Seat Action Buttons: Edit, Exchange, Cancel */}
+                        <div className="flex flex-wrap items-center gap-2 pt-1">
+                          {!isEditingGuest && (
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setEditGuestName(inspectingSeat.booking?.guestName || '');
+                                setEditGuestPhone(inspectingSeat.booking?.guestPhone || '');
+                                setIsEditingGuest(true);
+                              }}
+                              className="px-3.5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition flex items-center space-x-1.5 border border-slate-700"
+                            >
+                              <Edit3 className="w-3.5 h-3.5 text-teal-400" />
+                              <span>Edit Name / Phone</span>
+                            </button>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => setIsExchangingSeat(prev => !prev)}
+                            className="px-3.5 py-2 rounded-xl bg-teal-500/15 hover:bg-teal-500/25 border border-teal-500/30 text-teal-300 text-xs font-bold transition flex items-center space-x-1.5"
+                          >
+                            <ArrowLeftRight className="w-3.5 h-3.5 text-teal-400" />
+                            <span>{isExchangingSeat ? 'Exit Exchange Mode' : 'Exchange This Seat'}</span>
+                          </button>
+
+                          {/* Quick Dropdown for Exchange if preferred over clicking grid */}
+                          {isExchangingSeat && openSeatsList.length > 0 && (
+                            <div className="flex items-center space-x-1.5">
+                              <select
+                                onChange={(e) => {
+                                  const targetSeat = openSeatsList.find((s) => s.id === e.target.value);
+                                  if (targetSeat) handleExecuteExchangeSeat(targetSeat);
+                                }}
+                                className="px-2.5 py-2 rounded-xl bg-slate-950 border border-teal-500 text-white text-xs font-semibold focus:outline-none"
+                              >
+                                <option value="">Or Pick Open Seat from List...</option>
+                                {openSeatsList.map((s) => (
+                                  <option key={s.id} value={s.id}>
+                                    Row {s.row} - Seat {s.col} ({s.type})
+                                  </option>
+                                ))}
+                              </select>
+                            </div>
+                          )}
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (inspectingSeat.booking && inspectingSeat.bookedSeat) {
+                                setSeatCancelConfirmation({
+                                  booking: inspectingSeat.booking,
+                                  seatId: inspectingSeat.bookedSeat.seatId,
+                                  seatLabel: inspectingSeat.bookedSeat.label
+                                });
+                              }
+                            }}
+                            className="px-3.5 py-2 rounded-xl bg-rose-500/15 hover:bg-rose-500/25 text-rose-300 border border-rose-500/30 text-xs font-bold transition flex items-center space-x-1.5 ml-auto"
+                          >
+                            <Trash2 className="w-3.5 h-3.5 text-rose-400" />
+                            <span>Cancel This Seat</span>
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      /* Available Seat Options (Fast Walk-in Booking) */
+                      <div className="space-y-3">
+                        <p className="text-xs text-slate-400">
+                          Seat <strong>{inspectingSeat.seatConfig.row}{inspectingSeat.seatConfig.col}</strong> is currently unoccupied and open for reservations.
+                        </p>
+
+                        {!showWalkinForm ? (
+                          <button
+                            type="button"
+                            onClick={() => setShowWalkinForm(true)}
+                            className="px-4 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold transition flex items-center space-x-1.5 shadow-md"
+                          >
+                            <Plus className="w-4 h-4" />
+                            <span>Book / Block Seat for Walk-in Guest</span>
+                          </button>
+                        ) : (
+                          <div className="p-3.5 rounded-xl bg-slate-950 border border-teal-500/40 space-y-3">
+                            <span className="text-xs font-bold text-white block">
+                              Fast Walk-in Reservation (Seat {inspectingSeat.seatConfig.row}{inspectingSeat.seatConfig.col})
+                            </span>
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-300 mb-1">Guest Name</label>
+                                <input
+                                  type="text"
+                                  value={walkinGuestName}
+                                  onChange={(e) => setWalkinGuestName(e.target.value)}
+                                  placeholder="e.g. Walk-in Customer"
+                                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs focus:border-teal-400 focus:outline-none"
+                                />
+                              </div>
+                              <div>
+                                <label className="block text-xs font-semibold text-slate-300 mb-1">Guest Mobile</label>
+                                <input
+                                  type="tel"
+                                  value={walkinGuestPhone}
+                                  onChange={(e) => setWalkinGuestPhone(e.target.value)}
+                                  className="w-full px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-white text-xs font-mono focus:border-teal-400 focus:outline-none"
+                                />
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-end space-x-2 pt-1">
+                              <button
+                                type="button"
+                                onClick={() => setShowWalkinForm(false)}
+                                className="px-3 py-1.5 rounded-lg bg-slate-800 text-slate-300 text-xs"
+                              >
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                disabled={isBookingWalkin}
+                                onClick={() => handleCreateWalkin(inspectingSeat.seatConfig)}
+                                className="px-4 py-1.5 rounded-lg bg-teal-500 hover:bg-teal-400 text-slate-950 text-xs font-bold transition shadow-md"
+                              >
+                                {isBookingWalkin ? 'Reserving...' : 'Confirm Walk-in Booking'}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div className="p-4 rounded-xl bg-slate-950/60 border border-slate-800 text-center text-xs text-slate-400">
+                    💡 Click any seat on the grid above to view attendee information, edit guest name/phone, exchange seats, or cancel tickets.
+                  </div>
+                )}
+              </div>
+
+              {/* Bottom footer */}
+              <div className="flex justify-end pt-2 border-t border-slate-800 shrink-0">
+                <button
+                  type="button"
+                  onClick={() => setShowSeatingModal(false)}
+                  className="px-5 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold transition"
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* MODAL: SEAT CANCELLATION CONFIRMATION */}
+      {seatCancelConfirmation && (
+        <div className="fixed inset-0 z-50 bg-black/85 flex items-center justify-center p-4 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-slate-900 border border-rose-500/40 rounded-3xl p-6 max-w-md w-full space-y-4 shadow-2xl text-center">
+            <div className="w-12 h-12 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center mx-auto">
+              <Trash2 className="w-6 h-6" />
+            </div>
+
+            <div className="space-y-1">
+              <h3 className="text-base font-bold text-white">
+                Cancel Seat {seatCancelConfirmation.seatLabel}?
+              </h3>
+              <p className="text-xs text-slate-400">
+                Are you sure you want to cancel seat <strong className="text-white">{seatCancelConfirmation.seatLabel}</strong> for guest <strong className="text-white">{seatCancelConfirmation.booking.guestName}</strong>?
+              </p>
+              <p className="text-[11px] text-amber-300/80 pt-1">
+                This will immediately release the seat in the system so other customers can book it.
+              </p>
+            </div>
+
+            <div className="flex space-x-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setSeatCancelConfirmation(null)}
+                className="flex-1 py-2.5 rounded-xl bg-slate-800 text-slate-300 font-bold text-xs hover:bg-slate-700 transition"
+              >
+                No, Keep Seat
+              </button>
+              <button
+                type="button"
+                disabled={isCancellingSeat}
+                onClick={handleExecuteCancelSeat}
+                className="flex-1 py-2.5 rounded-xl bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs shadow-md transition"
+              >
+                {isCancellingSeat ? 'Releasing...' : 'Yes, Cancel Seat'}
+              </button>
             </div>
           </div>
         </div>
