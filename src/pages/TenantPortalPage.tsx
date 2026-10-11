@@ -5,7 +5,7 @@ import { Tenant, Hall, Screen, Movie, Showtime } from '../types';
 import { useLanguage } from '../context/LanguageContext';
 import { 
   Building2, MapPin, Phone, MessageSquare, Calendar, Clock, 
-  Film, Sparkles, ChevronRight, ShieldCheck, AlertCircle, Star, Play, X
+  Film, Sparkles, ChevronRight, ShieldCheck, AlertCircle, Star, Play, X, Eye
 } from 'lucide-react';
 import { getYouTubeEmbedUrl, getDirectYouTubeWatchUrl } from '../lib/youtube';
 
@@ -24,6 +24,7 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
   const [movies, setMovies] = useState<Movie[]>([]);
   const [showtimes, setShowtimes] = useState<Showtime[]>([]);
   const [selectedMovieForTrailer, setSelectedMovieForTrailer] = useState<Movie | null>(null);
+  const [selectedPosterMovie, setSelectedPosterMovie] = useState<Movie | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -279,14 +280,28 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
                 className="glass-panel rounded-2xl overflow-hidden border border-slate-800 hover:border-teal-500/40 transition flex flex-col justify-between shadow-xl"
               >
                 <div>
-                  {/* 1. Backdrop Banner & Badges */}
-                  <div className="relative aspect-[16/9] overflow-hidden bg-slate-900 group">
-                    <img
-                      src={movie?.backdropUrl || movie?.posterUrl}
-                      alt={movie?.titleEn}
-                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-[#0a0f1d] via-[#0a0f1d]/40 to-black/30" />
+                  {/* 1. Backdrop Banner & Badges - Compact & elegant on mobile */}
+                  <div className="relative aspect-[21/9] sm:aspect-[16/9] overflow-hidden bg-slate-950 group">
+                    {movie?.backdropUrl && movie.backdropUrl !== movie.posterUrl ? (
+                      <img
+                        src={movie.backdropUrl}
+                        alt={movie?.titleEn}
+                        className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
+                      />
+                    ) : (
+                      /* Ambient cinematic gradient & subtle blur when only vertical poster exists, avoiding extreme poster crop */
+                      <div className="w-full h-full relative overflow-hidden bg-gradient-to-br from-slate-900 via-slate-950 to-teal-950/40">
+                        {movie?.posterUrl && (
+                          <img
+                            src={movie.posterUrl}
+                            alt=""
+                            className="w-full h-full object-cover blur-2xl opacity-25 scale-125"
+                          />
+                        )}
+                        <div className="absolute inset-0 bg-slate-950/30" />
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-gradient-to-t from-[#0a0f1d] via-[#0a0f1d]/50 to-black/30" />
                     
                     {/* Top Left Badges */}
                     <div className="absolute top-2.5 left-2.5 flex flex-wrap gap-1.5 z-10">
@@ -329,20 +344,36 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
                   </div>
 
                   {/* 2. Movie Header with Theatrical Vertical Poster & Details */}
-                  <div className="p-4 sm:p-5 pt-0 relative space-y-3">
-                    <div className="flex items-start space-x-3 -mt-9 sm:-mt-12 relative z-20">
-                      {/* Vertical 2:3 Movie Poster Artwork */}
-                      <div className="relative w-18 sm:w-24 aspect-[2/3] shrink-0 rounded-xl overflow-hidden border-2 border-slate-700/80 shadow-2xl bg-slate-900 group-hover:border-teal-500/60 transition shadow-black/80">
+                  <div className="p-3.5 sm:p-5 pt-0 relative space-y-3">
+                    <div className="flex items-start space-x-3 -mt-6 sm:-mt-10 relative z-20">
+                      {/* Vertical 2:3 Movie Poster Artwork - Tap to View Full Picture */}
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.preventDefault();
+                          e.stopPropagation();
+                          if (movie) setSelectedPosterMovie(movie);
+                        }}
+                        className="relative w-16 sm:w-20 md:w-24 aspect-[2/3] shrink-0 rounded-xl overflow-hidden border-2 border-slate-700/80 shadow-2xl bg-slate-900 group-hover:border-teal-500/60 transition shadow-black/80 text-left focus:outline-none focus:ring-2 focus:ring-teal-400 group/poster cursor-zoom-in"
+                        title="Tap to view full uncropped movie poster"
+                      >
                         <img
                           src={movie?.posterUrl || movie?.backdropUrl}
                           alt={`${movie?.titleEn} poster`}
-                          className="w-full h-full object-cover"
+                          className="w-full h-full object-cover object-top"
                           loading="lazy"
                         />
-                      </div>
+                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover/poster:opacity-100 flex items-center justify-center transition">
+                          <Eye className="w-4 h-4 text-white drop-shadow" />
+                        </div>
+                        <span className="absolute bottom-1 right-1 px-1 py-0.5 rounded text-[8px] font-bold bg-black/80 text-teal-300 border border-teal-500/30 flex items-center space-x-0.5">
+                          <Eye className="w-2.5 h-2.5" />
+                          <span>Full</span>
+                        </span>
+                      </button>
 
                       {/* Title & Key Specs next to poster */}
-                      <div className="flex-1 pt-9 sm:pt-12 min-w-0">
+                      <div className="flex-1 pt-6 sm:pt-10 min-w-0">
                         <h3 className="font-bold text-sm sm:text-lg text-white group-hover:text-teal-300 transition truncate leading-snug">
                           {movie?.titleEn}
                         </h3>
@@ -468,6 +499,53 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
                 <span>Watch Directly on YouTube</span>
                 <span>↗</span>
               </a>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Full Poster Preview Lightbox Modal */}
+      {selectedPosterMovie && (
+        <div 
+          className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center p-3 sm:p-4 backdrop-blur-md animate-fadeIn"
+          onClick={() => setSelectedPosterMovie(null)}
+        >
+          <div 
+            className="bg-slate-900 border border-slate-800 rounded-3xl max-w-sm sm:max-w-md w-full p-4 sm:p-5 space-y-3 shadow-2xl relative"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-2 border-b border-slate-800">
+              <div className="min-w-0 pr-2">
+                <h3 className="font-bold text-white text-sm sm:text-base truncate">
+                  {selectedPosterMovie.titleEn}
+                </h3>
+                {selectedPosterMovie.titleDv && (
+                  <p className="text-xs text-teal-400 font-dhivehi truncate">
+                    {selectedPosterMovie.titleDv}
+                  </p>
+                )}
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedPosterMovie(null)}
+                className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white flex items-center justify-center text-sm transition shrink-0"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="max-h-[70vh] flex items-center justify-center overflow-hidden rounded-2xl bg-black border border-slate-800">
+              <img
+                src={selectedPosterMovie.posterUrl || selectedPosterMovie.backdropUrl}
+                alt={selectedPosterMovie.titleEn}
+                className="w-full h-auto max-h-[70vh] object-contain rounded-2xl"
+              />
+            </div>
+
+            <div className="text-center pt-1">
+              <p className="text-[11px] text-slate-400">
+                Full Theatrical Poster • {selectedPosterMovie.ageRating || 'All Ages'} {selectedPosterMovie.durationMinutes ? `• ${selectedPosterMovie.durationMinutes}m` : ''}
+              </p>
             </div>
           </div>
         </div>

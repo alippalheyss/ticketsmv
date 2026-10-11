@@ -89,6 +89,17 @@ export const TenantAdminPage: React.FC = () => {
   const [newShowStandardPrice, setNewShowStandardPrice] = useState(100);
   const [newShowVipPrice, setNewShowVipPrice] = useState(150);
 
+  // Edit Showtime / Price State
+  const [editingShowtime, setEditingShowtime] = useState<Showtime | null>(null);
+  const [showEditPriceModal, setShowEditPriceModal] = useState(false);
+  const [editStandardPrice, setEditStandardPrice] = useState<number>(100);
+  const [editVipPrice, setEditVipPrice] = useState<number>(150);
+  const [editCouplePrice, setEditCouplePrice] = useState<number>(220);
+  const [editAccessiblePrice, setEditAccessiblePrice] = useState<number>(80);
+  const [editShowDate, setEditShowDate] = useState<string>('');
+  const [editShowTime, setEditShowTime] = useState<string>('');
+  const [editShowStatus, setEditShowStatus] = useState<Showtime['status']>('scheduled');
+
   // Branding & Bank Details Form State
   const [brandingForm, setBrandingForm] = useState({
     name: '',
@@ -851,6 +862,49 @@ export const TenantAdminPage: React.FC = () => {
   const handleCancelShowtime = (showtimeId: string) => {
     cinemaStore.cancelShowtime(showtimeId);
     refreshData();
+  };
+
+  // Open Edit Showtime & Pricing Modal
+  const handleOpenEditShowtime = (st: Showtime) => {
+    setEditingShowtime(st);
+    setEditStandardPrice(st.priceTiers?.standard || 100);
+    setEditVipPrice(st.priceTiers?.vip || 150);
+    setEditCouplePrice(st.priceTiers?.couple || Math.round((st.priceTiers?.standard || 100) * 2.2));
+    setEditAccessiblePrice(st.priceTiers?.accessible || Math.round((st.priceTiers?.standard || 100) * 0.8));
+    setEditShowDate(st.date);
+    setEditShowTime(st.startTime);
+    setEditShowStatus(st.status || 'scheduled');
+    setShowEditPriceModal(true);
+  };
+
+  // Save Showtime Price & Details Edits
+  const handleSaveEditedShowtime = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingShowtime) return;
+
+    const std = Number(editStandardPrice) || 0;
+    const vip = Number(editVipPrice) || Math.round(std * 1.5);
+    const couple = Number(editCouplePrice) || Math.round(std * 2.2);
+    const accessible = Number(editAccessiblePrice) || Math.round(std * 0.8);
+
+    const updated: Showtime = {
+      ...editingShowtime,
+      date: editShowDate || editingShowtime.date,
+      startTime: editShowTime || editingShowtime.startTime,
+      status: editShowStatus,
+      priceTiers: {
+        standard: std,
+        vip: vip,
+        couple: couple,
+        accessible: accessible,
+      }
+    };
+
+    cinemaStore.saveShowtime(updated);
+    setShowEditPriceModal(false);
+    setEditingShowtime(null);
+    refreshData();
+    alert('Showtime ticket prices and screening details updated successfully!');
   };
 
   // Subscription Plan Upgrade Request (Requires Super Admin Approval)
@@ -1650,6 +1704,16 @@ export const TenantAdminPage: React.FC = () => {
                     >
                       <Armchair className="w-3.5 h-3.5 text-teal-400" />
                       <span>Manage Seating</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => handleOpenEditShowtime(st)}
+                      className="py-1.5 px-2.5 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 border border-teal-500/40 text-center text-xs font-bold text-teal-300 transition flex items-center justify-center space-x-1"
+                      title="Edit ticket prices and showtime details"
+                    >
+                      <Edit3 className="w-3.5 h-3.5 text-teal-400" />
+                      <span>Edit Price</span>
                     </button>
 
                     <Link
@@ -3291,6 +3355,183 @@ export const TenantAdminPage: React.FC = () => {
                 className="px-5 py-2 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs"
               >
                 Schedule
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* MODAL: EDIT SHOWTIME & PRICING */}
+      {showEditPriceModal && editingShowtime && (
+        <div className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center p-4 backdrop-blur-sm animate-fadeIn">
+          <form
+            onSubmit={handleSaveEditedShowtime}
+            className="bg-slate-900 border border-slate-700/80 rounded-3xl p-6 sm:p-7 max-w-lg w-full space-y-4 shadow-2xl relative"
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-slate-800">
+              <div>
+                <h3 className="text-lg font-bold text-white flex items-center space-x-2">
+                  <DollarSign className="w-5 h-5 text-teal-400" />
+                  <span>Edit Showtime & Ticket Prices</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Update seat prices, schedule timings, and screening status.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditPriceModal(false);
+                  setEditingShowtime(null);
+                }}
+                className="p-1.5 text-slate-400 hover:text-white rounded-lg bg-slate-800 transition"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Movie & Screen Info Banner */}
+            <div className="bg-slate-950/80 p-3 rounded-2xl border border-slate-800 flex items-center space-x-3">
+              {movies.find(m => m.id === editingShowtime.movieId)?.posterUrl && (
+                <img
+                  src={movies.find(m => m.id === editingShowtime.movieId)?.posterUrl}
+                  alt="Poster"
+                  className="w-12 h-16 object-cover rounded-lg border border-slate-700 shrink-0"
+                />
+              )}
+              <div className="min-w-0 flex-1">
+                <span className="text-[10px] uppercase font-bold text-teal-400 tracking-wider block">Selected Screening</span>
+                <h4 className="font-bold text-sm text-white truncate">
+                  {movies.find(m => m.id === editingShowtime.movieId)?.titleEn || 'Movie'}
+                </h4>
+                <p className="text-xs text-slate-400 truncate">
+                  {screens.find(s => s.id === editingShowtime.screenId)?.screenName || 'Screen'} • {halls.find(h => h.id === editingShowtime.hallId)?.name || 'Cinema Hall'}
+                </p>
+              </div>
+            </div>
+
+            {/* Price Tiers Grid */}
+            <div>
+              <label className="block text-xs font-bold uppercase tracking-wider text-teal-400 mb-2">
+                Seat Tier Pricing (MVR)
+              </label>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Standard Seat (MVR)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="5"
+                    required
+                    value={editStandardPrice}
+                    onChange={(e) => setEditStandardPrice(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white font-mono text-sm focus:border-teal-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    VIP Seat (MVR)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="5"
+                    required
+                    value={editVipPrice}
+                    onChange={(e) => setEditVipPrice(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white font-mono text-sm focus:border-teal-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Couple Seat (MVR)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="5"
+                    value={editCouplePrice}
+                    onChange={(e) => setEditCouplePrice(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white font-mono text-sm focus:border-teal-500 focus:outline-none"
+                  />
+                </div>
+
+                <div className="bg-slate-950/60 p-3 rounded-xl border border-slate-800">
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">
+                    Accessible Seat (MVR)
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="5"
+                    value={editAccessiblePrice}
+                    onChange={(e) => setEditAccessiblePrice(parseFloat(e.target.value) || 0)}
+                    className="w-full px-3 py-2 rounded-lg bg-slate-900 border border-slate-700 text-white font-mono text-sm focus:border-teal-500 focus:outline-none"
+                  />
+                </div>
+              </div>
+            </div>
+
+            {/* Date, Time & Status */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Screening Date</label>
+                <input
+                  type="date"
+                  required
+                  value={editShowDate}
+                  onChange={(e) => setEditShowDate(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:border-teal-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Start Time</label>
+                <input
+                  type="time"
+                  required
+                  value={editShowTime}
+                  onChange={(e) => setEditShowTime(e.target.value)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs font-mono focus:border-teal-500 focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-400 mb-1">Status</label>
+                <select
+                  value={editShowStatus}
+                  onChange={(e) => setEditShowStatus(e.target.value as any)}
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:border-teal-500 focus:outline-none"
+                >
+                  <option value="scheduled">Scheduled</option>
+                  <option value="running">Running (Live)</option>
+                  <option value="completed">Completed</option>
+                  <option value="cancelled">Cancelled</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="flex items-center justify-end space-x-3 pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowEditPriceModal(false);
+                  setEditingShowtime(null);
+                }}
+                className="px-4 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2.5 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-bold text-xs shadow-lg shadow-teal-500/20 transition active:scale-95 flex items-center space-x-1.5"
+              >
+                <Save className="w-4 h-4" />
+                <span>Save Price Changes</span>
               </button>
             </div>
           </form>
