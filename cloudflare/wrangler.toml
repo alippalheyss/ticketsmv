@@ -1,0 +1,8 @@
+name = "supabase-cinema-proxy"
+main = "worker.js"
+compatibility_date = "2024-09-01"
+
+# Bind to your custom domain or subroute if desired:
+# routes = [
+#   { pattern = "api.cinemamv.online/*", zone_name = "cinemamv.online" }
+# ]

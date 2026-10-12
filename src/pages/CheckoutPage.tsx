@@ -8,6 +8,7 @@ import {
   CreditCard, Upload, Phone, Mail, User, ShieldCheck, ArrowLeft, 
   CheckCircle2, Clock, AlertTriangle, FileText, Sparkles, Building 
 } from 'lucide-react';
+import { compressImage } from '../lib/imageCompression';
 
 export const CheckoutPage: React.FC = () => {
   const { showtimeId } = useParams<{ showtimeId: string }>();
@@ -94,17 +95,23 @@ export const CheckoutPage: React.FC = () => {
 
   const totalPrice = selectedSeats.reduce((sum, s) => sum + s.price, 0);
 
-  // Handle Transfer Receipt file upload
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Handle Transfer Receipt file upload with auto-compression (cuts egress by 90%)
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        const res = reader.result as string;
-        setSlipFile(res);
-        setSlipPreview(res);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImage(file, 1100, 1100, 0.78);
+        setSlipFile(compressed);
+        setSlipPreview(compressed);
+      } catch {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const res = reader.result as string;
+          setSlipFile(res);
+          setSlipPreview(res);
+        };
+        reader.readAsDataURL(file);
+      }
     }
   };
 

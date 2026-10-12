@@ -16,6 +16,7 @@ import {
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { MALDIVES_ATOLLS, getIslandsByAtoll } from '../data/maldivesLocations';
+import { compressImage } from '../lib/imageCompression';
 
 export const TenantAdminPage: React.FC = () => {
   const navigate = useNavigate();
@@ -530,60 +531,75 @@ export const TenantAdminPage: React.FC = () => {
     navigate('/');
   };
 
-  // Picture Upload Handlers
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  // Picture Upload Handlers - Auto-compressed to WebP/JPEG to minimize database egress
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setBrandingForm((prev) => ({ ...prev, logoUrl: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImage(file, 400, 400, 0.85);
+        setBrandingForm((prev) => ({ ...prev, logoUrl: compressed }));
+      } catch {
+        const reader = new FileReader();
+        reader.onloadend = () => setBrandingForm((prev) => ({ ...prev, logoUrl: reader.result as string }));
+        reader.readAsDataURL(file);
+      }
     }
   };
 
-  const handleBannerUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBannerUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setBrandingForm((prev) => ({ ...prev, bannerUrl: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImage(file, 1400, 800, 0.8);
+        setBrandingForm((prev) => ({ ...prev, bannerUrl: compressed }));
+      } catch {
+        const reader = new FileReader();
+        reader.onloadend = () => setBrandingForm((prev) => ({ ...prev, bannerUrl: reader.result as string }));
+        reader.readAsDataURL(file);
+      }
     }
   };
 
-  const handleBankQrUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleBankQrUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setBankForm((prev) => ({ ...prev, qrImageUrl: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImage(file, 600, 600, 0.85);
+        setBankForm((prev) => ({ ...prev, qrImageUrl: compressed }));
+      } catch {
+        const reader = new FileReader();
+        reader.onloadend = () => setBankForm((prev) => ({ ...prev, qrImageUrl: reader.result as string }));
+        reader.readAsDataURL(file);
+      }
     }
   };
 
   // Movie Artwork Upload Handlers (Poster & Background Backdrop)
-  const handleMoviePosterUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMoviePosterUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setMovieForm((prev) => ({ ...prev, posterUrl: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImage(file, 900, 1350, 0.82);
+        setMovieForm((prev) => ({ ...prev, posterUrl: compressed }));
+      } catch {
+        const reader = new FileReader();
+        reader.onloadend = () => setMovieForm((prev) => ({ ...prev, posterUrl: reader.result as string }));
+        reader.readAsDataURL(file);
+      }
     }
   };
 
-  const handleMovieBackdropUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleMovieBackdropUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setMovieForm((prev) => ({ ...prev, backdropUrl: reader.result as string }));
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImage(file, 1400, 800, 0.8);
+        setMovieForm((prev) => ({ ...prev, backdropUrl: compressed }));
+      } catch {
+        const reader = new FileReader();
+        reader.onloadend = () => setMovieForm((prev) => ({ ...prev, backdropUrl: reader.result as string }));
+        reader.readAsDataURL(file);
+      }
     }
   };
 
@@ -915,14 +931,17 @@ export const TenantAdminPage: React.FC = () => {
     setShowUpgradeModal(true);
   };
 
-  const handleSlipUploadForUpgrade = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleSlipUploadForUpgrade = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setUpgradeSlipUrl(reader.result as string);
-      };
-      reader.readAsDataURL(file);
+      try {
+        const compressed = await compressImage(file, 1000, 1000, 0.78);
+        setUpgradeSlipUrl(compressed);
+      } catch {
+        const reader = new FileReader();
+        reader.onloadend = () => setUpgradeSlipUrl(reader.result as string);
+        reader.readAsDataURL(file);
+      }
     }
   };
 
