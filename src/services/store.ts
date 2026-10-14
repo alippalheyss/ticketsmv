@@ -723,6 +723,16 @@ class MaldivianCinemaStore {
     this.broadcastSync();
   }
 
+  public updateTenantPassword(emailOrId: string, newPassword: string): boolean {
+    const list = this.getTenants();
+    const query = emailOrId.toLowerCase().trim();
+    const t = list.find((item) => item.id === emailOrId || item.ownerEmail.toLowerCase() === query);
+    if (!t) return false;
+    t.passwordHash = newPassword;
+    this.saveTenant(t);
+    return true;
+  }
+
   public updateTenantSubscription(
     tenantId: string, 
     model: 'weekly' | 'monthly' | 'yearly' | 'one_month' | 'free_trial', 

@@ -13,6 +13,7 @@ import { TicketPassPage } from './pages/TicketPassPage';
 import { ValidatorPage } from './pages/ValidatorPage';
 import { TenantAdminPage } from './pages/TenantAdminPage';
 import { SuperAdminPage } from './pages/SuperAdminPage';
+import { ResetPasswordPage } from './pages/ResetPasswordPage';
 
 import { AdminHubPage } from './pages/AdminHubPage';
 import { cinemaStore } from './services/store';
@@ -62,6 +63,7 @@ export function App() {
               <Route path="/validator" element={<ValidatorPage />} />
               <Route path="/tenant-admin" element={<TenantAdminPage />} />
               <Route path="/super-admin" element={<SuperAdminPage />} />
+              <Route path="/reset-password" element={<ResetPasswordPage />} />
 
               {/* Fallback */}
               <Route path="*" element={<HomePage />} />

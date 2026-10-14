@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { getTenantSession, setTenantSession, clearTenantSession, onTenantSessionChange } from '../lib/tenantSession';
+import { ForgotPasswordModal } from '../components/ForgotPasswordModal';
 
 export const ValidatorPage: React.FC = () => {
   const { t } = useLanguage();
@@ -53,6 +54,7 @@ export const ValidatorPage: React.FC = () => {
   const [loginPass, setLoginPass] = useState('');
   const [loginError, setLoginError] = useState('');
   const [isLoggingIn, setIsLoggingIn] = useState(false);
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   // Scanner state
   const [manualCode, setManualCode] = useState('');
@@ -351,9 +353,18 @@ export const ValidatorPage: React.FC = () => {
             </div>
 
             <div>
-              <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider mb-1.5">
-                Staff / Organizer Password
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label className="block text-xs font-bold text-slate-300 uppercase tracking-wider">
+                  Staff / Organizer Password
+                </label>
+                <button
+                  type="button"
+                  onClick={() => setShowForgotPassword(true)}
+                  className="text-[11px] text-amber-400 hover:text-amber-300 hover:underline transition"
+                >
+                  Forgot Password?
+                </button>
+              </div>
               <div className="relative">
                 <KeyRound className="w-4 h-4 text-slate-500 absolute left-3 top-3.5" />
                 <input
@@ -389,6 +400,13 @@ export const ValidatorPage: React.FC = () => {
             </p>
           </div>
         </div>
+
+        <ForgotPasswordModal
+          isOpen={showForgotPassword}
+          onClose={() => setShowForgotPassword(false)}
+          initialEmail={loginCode.includes('@') ? loginCode : ''}
+          portalName="Validator / Organizer"
+        />
       </div>
     );
   }

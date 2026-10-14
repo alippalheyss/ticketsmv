@@ -11,6 +11,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { getTenantSession, setTenantSession, clearTenantSession, onTenantSessionChange } from '../lib/tenantSession';
 import { Tenant, TenantRegistrationRequest, Hall, Screen } from '../types';
 import { MALDIVES_ATOLLS, getIslandsByAtoll } from '../data/maldivesLocations';
+import { ForgotPasswordModal } from '../components/ForgotPasswordModal';
 
 export const AdminHubPage: React.FC = () => {
   const navigate = useNavigate();
@@ -21,6 +22,7 @@ export const AdminHubPage: React.FC = () => {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [isFreeTrialModalOpen, setIsFreeTrialModalOpen] = useState(false);
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
   const [verificationSentEmail, setVerificationSentEmail] = useState<string | null>(null);
   const [selectedPlanForRegister, setSelectedPlanForRegister] = useState<'weekly' | 'monthly' | 'yearly' | 'one_month'>('monthly');
 
@@ -1012,9 +1014,21 @@ export const AdminHubPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-slate-300 mb-1.5">
-                  Staff Password / PIN
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="block text-xs font-bold text-slate-300">
+                    Staff Password / PIN
+                  </label>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsLoginModalOpen(false);
+                      setIsForgotPasswordOpen(true);
+                    }}
+                    className="text-[11px] text-teal-400 hover:text-teal-300 hover:underline transition"
+                  >
+                    Forgot Password?
+                  </button>
+                </div>
                 <input
                   type="password"
                   value={loginPassword}
@@ -1646,6 +1660,14 @@ export const AdminHubPage: React.FC = () => {
           </div>
         </div>
       )}
+
+      {/* -------------------- 4. FORGOT PASSWORD MODAL -------------------- */}
+      <ForgotPasswordModal
+        isOpen={isForgotPasswordOpen}
+        onClose={() => setIsForgotPasswordOpen(false)}
+        initialEmail={loginIdentifier.includes('@') ? loginIdentifier : ''}
+        portalName="Cinema Organizer"
+      />
     </div>
   );
 };

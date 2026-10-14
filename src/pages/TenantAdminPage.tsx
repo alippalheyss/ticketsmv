@@ -18,6 +18,7 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { getTenantSession, setTenantSession, clearTenantSession, onTenantSessionChange } from '../lib/tenantSession';
 import { MALDIVES_ATOLLS, getIslandsByAtoll } from '../data/maldivesLocations';
 import { compressImage } from '../lib/imageCompression';
+import { ForgotPasswordModal } from '../components/ForgotPasswordModal';
 
 export const TenantAdminPage: React.FC = () => {
   const navigate = useNavigate();
@@ -158,6 +159,65 @@ export const TenantAdminPage: React.FC = () => {
         setNewSlotSlipUrl(reader.result as string);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  // Forgot Password modal state
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
+
+  // Change Password Form State (inside profile settings)
+  const [currentPasswordInput, setCurrentPasswordInput] = useState('');
+  const [newPasswordInput, setNewPasswordInput] = useState('');
+  const [confirmPasswordInput, setConfirmPasswordInput] = useState('');
+  const [changePasswordError, setChangePasswordError] = useState('');
+  const [changePasswordSuccess, setChangePasswordSuccess] = useState('');
+  const [isChangingPassword, setIsChangingPassword] = useState(false);
+
+  const handleChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setChangePasswordError('');
+    setChangePasswordSuccess('');
+
+    if (!currentTenant) return;
+
+    if (newPasswordInput.length < 6) {
+      setChangePasswordError('New password must be at least 6 characters long.');
+      return;
+    }
+
+    if (newPasswordInput !== confirmPasswordInput) {
+      setChangePasswordError('New passwords do not match. Please re-type.');
+      return;
+    }
+
+    if (currentTenant.passwordHash && currentTenant.passwordHash !== currentPasswordInput.trim()) {
+      setChangePasswordError('Current password is incorrect.');
+      return;
+    }
+
+    setIsChangingPassword(true);
+    try {
+      if (isSupabaseConfigured()) {
+        const { error } = await supabase.auth.updateUser({
+          password: newPasswordInput
+        });
+        if (error) {
+          console.warn('Supabase updateUser password notice:', error.message);
+        }
+      }
+
+      cinemaStore.updateTenantPassword(currentTenant.ownerEmail, newPasswordInput);
+      currentTenant.passwordHash = newPasswordInput;
+      setTenantSession(currentTenant);
+
+      setChangePasswordSuccess('Password updated successfully!');
+      setCurrentPasswordInput('');
+      setNewPasswordInput('');
+      setConfirmPasswordInput('');
+    } catch (err: any) {
+      setChangePasswordError(err?.message || 'Failed to change password. Please try again.');
+    } finally {
+      setIsChangingPassword(false);
     }
   };
 
@@ -1169,9 +1229,18 @@ export const TenantAdminPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1.5">
-              Security PIN / Password
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-300">
+                Security PIN / Password
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
+                className="text-[11px] text-teal-400 hover:text-teal-300 hover:underline transition"
+              >
+                Forgot Password?
+              </button>
+            </div>
             <input
               type="password"
               value={loginPass}
@@ -1194,6 +1263,13 @@ export const TenantAdminPage: React.FC = () => {
             ← Return to Public Movie Booking Site
           </Link>
         </div>
+
+        <ForgotPasswordModal
+          isOpen={showForgotPassword}
+          onClose={() => setShowForgotPassword(false)}
+          initialEmail={loginCode.includes('@') ? loginCode : ''}
+          portalName="Cinema Organizer"
+        />
       </div>
     );
   }
@@ -2215,6 +2291,91 @@ export const TenantAdminPage: React.FC = () => {
                   />
                 </div>
               </div>
+            </div>
+          </div>
+
+          {/* SECTION: ORGANIZER ACCOUNT SECURITY & PASSWORD */}
+          <div className="glass-panel rounded-3xl p-6 border border-slate-800 space-y-5">
+            <div className="flex items-center space-x-3 pb-3 border-b border-slate-800">
+              <div className="p-2.5 rounded-xl bg-teal-500/10 text-teal-400 border border-teal-500/20">
+                <Lock className="w-5 h-5" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-white">Organizer Security & Password</h3>
+                <p className="text-xs text-slate-400">
+                  Update your cinema manager credentials for <span className="text-teal-300 font-mono">{currentTenant.ownerEmail}</span>
+                </p>
+              </div>
+            </div>
+
+            {changePasswordError && (
+              <div className="p-3.5 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs flex items-center space-x-2">
+                <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
+                <span>{changePasswordError}</span>
+              </div>
+            )}
+
+            {changePasswordSuccess && (
+              <div className="p-3.5 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-emerald-300 text-xs flex items-center space-x-2">
+                <CheckCircle2 className="w-4 h-4 shrink-0 text-emerald-400" />
+                <span>{changePasswordSuccess}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  Current Password
+                </label>
+                <input
+                  type="password"
+                  value={currentPasswordInput}
+                  onChange={(e) => setCurrentPasswordInput(e.target.value)}
+                  placeholder="Enter current password"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  New Password (min 6 chars) *
+                </label>
+                <input
+                  type="password"
+                  value={newPasswordInput}
+                  onChange={(e) => setNewPasswordInput(e.target.value)}
+                  placeholder="Enter new password"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1.5">
+                  Confirm New Password *
+                </label>
+                <input
+                  type="password"
+                  value={confirmPasswordInput}
+                  onChange={(e) => setConfirmPasswordInput(e.target.value)}
+                  placeholder="Re-type new password"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:outline-none focus:border-teal-400"
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-1">
+              <span className="text-[11px] text-slate-400">
+                After saving, you can use your new password on all devices and open tabs.
+              </span>
+              <button
+                type="button"
+                onClick={handleChangePassword}
+                disabled={isChangingPassword || !newPasswordInput}
+                className="px-5 py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-400 hover:from-teal-400 hover:to-cyan-300 text-slate-950 font-bold text-xs shadow-md transition active:scale-95 disabled:opacity-50 flex items-center space-x-1.5 self-start sm:self-auto"
+              >
+                <KeyRound className="w-3.5 h-3.5" />
+                <span>{isChangingPassword ? 'Saving Password...' : 'Change Password'}</span>
+              </button>
             </div>
           </div>
 

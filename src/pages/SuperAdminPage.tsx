@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { ForgotPasswordModal } from '../components/ForgotPasswordModal';
 
 export const SuperAdminPage: React.FC = () => {
   const { formatCurrency } = useLanguage();
@@ -21,6 +22,7 @@ export const SuperAdminPage: React.FC = () => {
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPass, setLoginPass] = useState('');
   const [authError, setAuthError] = useState('');
+  const [showForgotPassword, setShowForgotPassword] = useState(false);
 
   const [tenants, setTenants] = useState<Tenant[]>([]);
   const [tenantRequests, setTenantRequests] = useState<TenantRegistrationRequest[]>([]);
@@ -217,9 +219,18 @@ export const SuperAdminPage: React.FC = () => {
           </div>
 
           <div>
-            <label className="block text-xs font-bold text-slate-300 mb-1.5">
-              Password
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-300">
+                Password
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowForgotPassword(true)}
+                className="text-[11px] text-purple-400 hover:text-purple-300 hover:underline transition"
+              >
+                Forgot Password?
+              </button>
+            </div>
             <div className="relative">
               <KeyRound className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
               <input
@@ -247,6 +258,13 @@ export const SuperAdminPage: React.FC = () => {
             ← Return to Public Movie Booking Site
           </Link>
         </div>
+
+        <ForgotPasswordModal
+          isOpen={showForgotPassword}
+          onClose={() => setShowForgotPassword(false)}
+          initialEmail={loginEmail || 'alippalhey@gmail.com'}
+          portalName="Super Admin"
+        />
       </div>
     );
   }
