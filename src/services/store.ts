@@ -1966,6 +1966,26 @@ class MaldivianCinemaStore {
     req.status = 'approved';
     this.persist(STORAGE_KEYS.TENANT_REQUESTS, JSON.stringify(requests));
 
+    // Check if this is an additional cinema slot request
+    if (req.notes?.toLowerCase().includes('additional cinema slot')) {
+      const slotTenant = this.purchaseCinemaSlot(req.contactEmail, {
+        name: req.cinemaName,
+        island: req.island,
+        atoll: req.atoll,
+        contactPhone: req.contactPhone
+      });
+      this.addLog({
+        id: `log-${Date.now()}-approved-slot`,
+        type: 'tenant',
+        tenantId: slotTenant.id,
+        message: `Additional Cinema Slot "${slotTenant.name}" (${slotTenant.tenantCode}) approved for organizer ${req.contactEmail}`,
+        status: 'success',
+        timestamp: new Date().toISOString()
+      });
+      this.broadcastSync();
+      return slotTenant;
+    }
+
     // If an existing tenant is upgrading / switching their subscription plan
     const existingTenant = this.getTenants().find(
       (t) => (req.tenantCode && t.tenantCode?.toLowerCase() === req.tenantCode.toLowerCase()) ||

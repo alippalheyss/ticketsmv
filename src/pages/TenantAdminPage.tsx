@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate } from 'react-router-dom';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { getTenantSession, setTenantSession, clearTenantSession, onTenantSessionChange } from '../lib/tenantSession';
 import { MALDIVES_ATOLLS, getIslandsByAtoll } from '../data/maldivesLocations';
 import { compressImage } from '../lib/imageCompression';
 
@@ -23,18 +24,11 @@ export const TenantAdminPage: React.FC = () => {
   const { formatCurrency } = useLanguage();
 
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return Boolean(sessionStorage.getItem('mv_tenant_auth'));
+    return Boolean(getTenantSession());
   });
 
   const getInitialTenantId = (): string => {
-    try {
-      const saved = sessionStorage.getItem('mv_tenant_auth');
-      if (saved) {
-        const parsed = JSON.parse(saved);
-        if (parsed?.id) return parsed.id;
-      }
-    } catch {}
-    return '';
+    return getTenantSession()?.id || '';
   };
 
   const [loginCode, setLoginCode] = useState('');
@@ -151,8 +145,21 @@ export const TenantAdminPage: React.FC = () => {
   const [newSlotIsland, setNewSlotIsland] = useState('');
   const [newSlotAtoll, setNewSlotAtoll] = useState('Kaafu (K)');
   const [newSlotPhone, setNewSlotPhone] = useState('');
+  const [newSlotSlipUrl, setNewSlotSlipUrl] = useState('');
+  const [newSlotNotes, setNewSlotNotes] = useState('');
   const [slotError, setSlotError] = useState('');
   const [isActivatingSlot, setIsActivatingSlot] = useState(false);
+
+  const handleSlotSlipUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setNewSlotSlipUrl(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Showtime filtering for Reports (Attendees) and Slips
   const [selectedShowtimeForReports, setSelectedShowtimeForReports] = useState<string>('latest');
@@ -223,11 +230,7 @@ export const TenantAdminPage: React.FC = () => {
     setTenants(allT);
     setTenantRequests(cinemaStore.getTenantRequests());
 
-    const saved = sessionStorage.getItem('mv_tenant_auth');
-    let sessionTenant: Tenant | null = null;
-    if (saved) {
-      try { sessionTenant = JSON.parse(saved); } catch {}
-    }
+    const sessionTenant: Tenant | null = getTenantSession();
 
     // Filter to only cinemas owned by the logged-in organizer
     const myTenants = sessionTenant
@@ -299,6 +302,23 @@ export const TenantAdminPage: React.FC = () => {
     });
     return () => unsub();
   }, [selectedTenantId]);
+
+  // Keep every open tab on the same organizer account.
+  useEffect(() => {
+    return onTenantSessionChange((t) => {
+      if (!t) {
+        setIsAuthenticated(false);
+        setCurrentTenant(null);
+        return;
+      }
+      const mine = cinemaStore.getTenants().filter(
+        (x) => x.ownerEmail.toLowerCase() === t.ownerEmail.toLowerCase()
+      );
+      setIsAuthenticated(true);
+      // Switch only if a different organizer logged in (not just a different own cinema)
+      setSelectedTenantId((prev) => (mine.some((x) => x.id === prev) ? prev : t.id));
+    });
+  }, []);
 
   // Sorted list of showtimes for the current tenant (latest date/time first)
   const tenantShowtimes = useMemo(() => {
@@ -524,7 +544,7 @@ export const TenantAdminPage: React.FC = () => {
     if (!currentTenant) return;
     setIsDeletingProfile(true);
     cinemaStore.deleteTenant(currentTenant.id);
-    sessionStorage.removeItem('mv_tenant_auth');
+    clearTenantSession();
     setShowDeleteProfileModal(false);
     setIsDeletingProfile(false);
     alert(`Cinema "${currentTenant.name}" and all records have been permanently deleted.`);
@@ -657,7 +677,7 @@ export const TenantAdminPage: React.FC = () => {
     };
     setCurrentTenant(updated);
     cinemaStore.saveTenant(updated);
-    sessionStorage.setItem('mv_tenant_auth', JSON.stringify(updated));
+    setTenantSession(updated);
     alert(`Assigned new random subdomain: ${newSlug}.cinemamv.online`);
     refreshData();
   };
@@ -702,7 +722,7 @@ export const TenantAdminPage: React.FC = () => {
     };
 
     cinemaStore.saveTenant(updated);
-    sessionStorage.setItem('mv_tenant_auth', JSON.stringify(updated));
+    setTenantSession(updated);
     setCurrentTenant(updated);
     setInitialBrandingForm({
       ...brandingForm,
@@ -992,26 +1012,40 @@ export const TenantAdminPage: React.FC = () => {
       return;
     }
 
+    if (!newSlotSlipUrl) {
+      setSlotError('Please upload your BML transfer slip receipt as proof of payment.');
+      return;
+    }
+
     if (!currentTenant) return;
 
     setIsActivatingSlot(true);
     try {
-      const created = cinemaStore.purchaseCinemaSlot(currentTenant.ownerEmail, {
-        name: newSlotCinemaName.trim(),
-        island: newSlotIsland.trim(),
+      cinemaStore.createTenantRequest({
+        cinemaName: newSlotCinemaName.trim(),
         atoll: newSlotAtoll,
-        contactPhone: newSlotPhone.trim() || currentTenant.branding.contactPhone
+        island: newSlotIsland.trim(),
+        contactPerson: currentTenant.name,
+        contactPhone: newSlotPhone.trim() || currentTenant.branding.contactPhone,
+        contactEmail: currentTenant.ownerEmail,
+        subscriptionPlan: 'monthly',
+        subscriptionPriceMvr: 249,
+        paymentMethod: 'bml_transfer',
+        paymentSlipUrl: newSlotSlipUrl,
+        channel: 'in_app',
+        notes: `Additional Cinema Slot Purchase: ${newSlotCinemaName.trim()} (${newSlotIsland.trim()}). ${newSlotNotes.trim()}`
       });
 
-      refreshData();
-      setSelectedTenantId(created.id);
       setShowBuySlotModal(false);
       setNewSlotCinemaName('');
       setNewSlotIsland('');
       setNewSlotPhone('');
-      alert(`🎉 Cinema Slot Activated! You can now manage "${created.name}" (${created.tenantCode}) alongside your other cinema.`);
+      setNewSlotSlipUrl('');
+      setNewSlotNotes('');
+      alert(`🎉 Additional cinema slot request for "${newSlotCinemaName.trim()}" submitted! Super Admin will review your BML transfer slip and activate your new cinema slot shortly.`);
+      refreshData();
     } catch {
-      setSlotError('Failed to activate cinema slot. Please try again.');
+      setSlotError('Failed to submit cinema slot purchase request. Please try again.');
     } finally {
       setIsActivatingSlot(false);
     }
@@ -1046,7 +1080,7 @@ export const TenantAdminPage: React.FC = () => {
     setLoginError('');
 
     if (customTenant) {
-      sessionStorage.setItem('mv_tenant_auth', JSON.stringify(customTenant));
+      setTenantSession(customTenant);
       setSelectedTenantId(customTenant.id);
       setIsAuthenticated(true);
       return;
@@ -1082,14 +1116,14 @@ export const TenantAdminPage: React.FC = () => {
       return;
     }
 
-    sessionStorage.setItem('mv_tenant_auth', JSON.stringify(found));
+    setTenantSession(found);
     setSelectedTenantId(found.id);
     setIsAuthenticated(true);
     refreshData();
   };
 
   const handleTenantLogout = () => {
-    sessionStorage.removeItem('mv_tenant_auth');
+    clearTenantSession();
     setIsAuthenticated(false);
   };
 
@@ -3579,14 +3613,14 @@ export const TenantAdminPage: React.FC = () => {
               </div>
               <h3 className="text-xl font-extrabold text-white">Purchase Additional Cinema Slot</h3>
               <p className="text-xs text-slate-300 leading-relaxed">
-                By default, each organizer account can operate 1 cinema. Purchase an extra cinema slot to manage a second cinema branch, island hall, or open-air screen under your same account.
+                By default, each organizer account can operate 1 cinema. Transfer the MVR 249 slot expansion fee to CinemaMV and attach your BML transfer slip below. Super Admin will verify and activate your extra slot.
               </p>
             </div>
 
             {/* Pricing badge */}
             <div className="p-4 rounded-2xl bg-gradient-to-br from-amber-500/10 via-slate-950 to-teal-500/10 border border-amber-500/30 flex items-center justify-between">
               <div>
-                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Slot Fee</span>
+                <span className="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Slot Expansion Fee</span>
                 <span className="text-lg font-black text-amber-300">MVR 249</span>
                 <span className="text-xs text-slate-400"> / month</span>
               </div>
@@ -3595,6 +3629,44 @@ export const TenantAdminPage: React.FC = () => {
               </span>
             </div>
 
+            {/* CinemaMV Platform Bank Details for Slot Transfer */}
+            {(() => {
+              const platBank = cinemaStore.getPlatformBankDetails();
+              return (
+                <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-2 text-xs">
+                  <div className="font-bold text-amber-300 flex items-center justify-between">
+                    <span className="flex items-center space-x-1.5">
+                      <CreditCard className="w-4 h-4 shrink-0" />
+                      <span>CinemaMV Platform Payment Account</span>
+                    </span>
+                    <span className="text-[10px] text-amber-300 bg-amber-500/20 px-2 py-0.5 rounded font-mono">BML Transfer</span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px] pt-1">
+                    <div>
+                      <span className="text-slate-400 block">Bank Name:</span>
+                      <span className="font-medium text-white">{platBank.bankName}</span>
+                    </div>
+                    <div>
+                      <span className="text-slate-400 block">Currency:</span>
+                      <span className="font-medium text-white">{platBank.currency}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-slate-400 block">Account Number:</span>
+                      <span className="font-mono font-bold text-amber-300 text-sm">{platBank.accountNumber}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-slate-400 block">Account Name:</span>
+                      <span className="font-medium text-white">{platBank.accountName}</span>
+                    </div>
+                    <div className="col-span-2">
+                      <span className="text-slate-400 block">Transfer Memo / Remarks:</span>
+                      <span className="font-mono text-teal-300 font-bold">SLOT-{currentTenant.tenantCode || currentTenant.slug}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
+
             {slotError && (
               <div className="p-3 rounded-xl bg-rose-500/15 border border-rose-500/40 text-rose-300 text-xs flex items-center space-x-2">
                 <AlertCircle className="w-4 h-4 shrink-0 text-rose-400" />
@@ -3602,7 +3674,7 @@ export const TenantAdminPage: React.FC = () => {
               </div>
             )}
 
-            <div className="space-y-3.5">
+            <div className="space-y-3.5 max-h-[40vh] overflow-y-auto pr-1">
               <div>
                 <label className="block text-xs font-bold text-slate-300 mb-1">New Cinema / Hall Name *</label>
                 <input
@@ -3662,6 +3734,42 @@ export const TenantAdminPage: React.FC = () => {
                   className="w-full px-3.5 py-2.5 rounded-xl bg-slate-950 border border-slate-700 text-white text-sm focus:border-amber-400 focus:outline-none font-mono"
                 />
               </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-300 mb-1">
+                  Upload BML Transfer Slip Receipt <span className="text-rose-400">*</span>
+                </label>
+                <input
+                  type="file"
+                  accept="image/*"
+                  required
+                  onChange={handleSlotSlipUpload}
+                  className="block w-full text-xs text-slate-400 file:mr-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-amber-500 file:text-slate-950 hover:file:bg-amber-400 cursor-pointer"
+                />
+                {newSlotSlipUrl && (
+                  <div className="mt-2.5 p-2 rounded-xl bg-slate-950 border border-slate-800 flex items-center space-x-3">
+                    <img
+                      src={newSlotSlipUrl}
+                      alt="Receipt Preview"
+                      className="w-14 h-14 object-cover rounded-lg border border-slate-700"
+                    />
+                    <span className="text-xs text-emerald-400 font-medium">✓ Receipt attached successfully</span>
+                  </div>
+                )}
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">
+                  Transfer Remarks / Transaction Reference (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={newSlotNotes}
+                  onChange={(e) => setNewSlotNotes(e.target.value)}
+                  placeholder="e.g. BML Ref: 981242 transferred from Ahmed"
+                  className="w-full px-3 py-2 rounded-xl bg-slate-950 border border-slate-700 text-white text-xs focus:border-amber-400"
+                />
+              </div>
             </div>
 
             <div className="flex items-center justify-end space-x-3 pt-2">
@@ -3677,7 +3785,7 @@ export const TenantAdminPage: React.FC = () => {
                 disabled={isActivatingSlot}
                 className="px-6 py-2.5 rounded-xl bg-gradient-to-r from-amber-500 to-teal-500 hover:from-amber-400 hover:to-teal-400 text-slate-950 font-black text-xs shadow-lg transition active:scale-95 disabled:opacity-50"
               >
-                {isActivatingSlot ? 'Activating Slot...' : 'Purchase Slot & Add Cinema →'}
+                {isActivatingSlot ? 'Submitting Request...' : 'Submit Slot Purchase for Verification →'}
               </button>
             </div>
           </form>

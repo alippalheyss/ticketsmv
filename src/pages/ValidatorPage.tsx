@@ -9,18 +9,22 @@ import {
   Building2, Sparkles, AlertCircle, RefreshCw, Loader2 
 } from 'lucide-react';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { getTenantSession, setTenantSession, clearTenantSession, onTenantSessionChange } from '../lib/tenantSession';
 
 export const ValidatorPage: React.FC = () => {
   const { t } = useLanguage();
 
   // Authentication State
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    return Boolean(sessionStorage.getItem('mv_validator_auth') || sessionStorage.getItem('mv_tenant_auth'));
+    return Boolean(sessionStorage.getItem('mv_validator_auth') || getTenantSession());
   });
 
   const [currentTenant, setCurrentTenant] = useState<Tenant | null>(() => {
     try {
-      const saved = sessionStorage.getItem('mv_validator_auth') || sessionStorage.getItem('mv_tenant_auth');
+      const activeTenant = getTenantSession();
+      if (activeTenant && activeTenant.status !== 'suspended') return activeTenant;
+
+      const saved = sessionStorage.getItem('mv_validator_auth');
       if (saved) {
         const parsed = JSON.parse(saved);
         const list = cinemaStore.getTenants();
@@ -30,6 +34,19 @@ export const ValidatorPage: React.FC = () => {
     } catch {}
     return null;
   });
+
+  // Keep validator in sync across tabs when organizer session changes
+  useEffect(() => {
+    return onTenantSessionChange((t) => {
+      if (t) {
+        setCurrentTenant(t);
+        setIsAuthenticated(true);
+      } else if (!sessionStorage.getItem('mv_validator_auth')) {
+        setIsAuthenticated(false);
+        setCurrentTenant(null);
+      }
+    });
+  }, []);
 
   // Login form state
   const [loginCode, setLoginCode] = useState('');
@@ -153,6 +170,7 @@ export const ValidatorPage: React.FC = () => {
       }
 
       sessionStorage.setItem('mv_validator_auth', JSON.stringify(found));
+      setTenantSession(found);
       setCurrentTenant(found);
       setIsAuthenticated(true);
     } catch (err: any) {
@@ -164,7 +182,7 @@ export const ValidatorPage: React.FC = () => {
 
   const handleStaffLogout = () => {
     sessionStorage.removeItem('mv_validator_auth');
-    sessionStorage.removeItem('mv_tenant_auth');
+    clearTenantSession();
     setIsAuthenticated(false);
     setCurrentTenant(null);
     setValidationResult(null);

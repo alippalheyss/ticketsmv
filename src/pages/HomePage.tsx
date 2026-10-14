@@ -11,6 +11,7 @@ import {
 } from 'lucide-react';
 import { getYouTubeEmbedUrl, getDirectYouTubeWatchUrl } from '../lib/youtube';
 import { MALDIVES_ATOLLS, getIslandsByAtoll } from '../data/maldivesLocations';
+import { supabase, isSupabaseConfigured } from '../lib/supabase';
 
 export const HomePage: React.FC = () => {
   const { t, formatCurrency, isDhivehi } = useLanguage();
@@ -169,8 +170,37 @@ export const HomePage: React.FC = () => {
       return;
     }
 
+    const cleanEmail = reqForm.contactEmail.trim().toLowerCase();
+
+    // Prevent duplicate registration with existing email
+    const allTenantsList = cinemaStore.getTenants();
+    const existingOrg = allTenantsList.find((t) => t.ownerEmail.toLowerCase() === cleanEmail);
+    if (existingOrg) {
+      setReqFormError(`The email "${cleanEmail}" already has an active cinema account ("${existingOrg.name}"). To add a second cinema to this email, please log in to your organizer portal.`);
+      return;
+    }
+
+    const existingPending = cinemaStore.getTenantRequests().find(
+      (r) => r.status === 'pending' && r.contactEmail.toLowerCase() === cleanEmail
+    );
+    if (existingPending) {
+      setReqFormError(`A cinema registration request for "${cleanEmail}" is already pending Super Admin approval.`);
+      return;
+    }
+
     setIsSubmittingReq(true);
     try {
+      if (isSupabaseConfigured() && cleanEmail.includes('@')) {
+        try {
+          await supabase.auth.signUp({
+            email: cleanEmail,
+            password: reqPassword
+          });
+        } catch (authErr) {
+          console.warn('Supabase auth signup for organizer on home page:', authErr);
+        }
+      }
+
       const price = reqForm.subscriptionPlan === 'weekly' ? 149 : (reqForm.subscriptionPlan === 'yearly' || reqForm.subscriptionPlan === 'one_month') ? 499 : 249;
       const prefix = reqForm.cinemaName.replace(/[^a-zA-Z]/g, '').substring(0, 3).toUpperCase() || 'CIN';
       const genCode = `${prefix}-${Math.floor(10 + Math.random() * 89)}`;

@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { cinemaStore } from '../services/store';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
+import { getTenantSession, setTenantSession, clearTenantSession, onTenantSessionChange } from '../lib/tenantSession';
 import { Tenant, TenantRegistrationRequest, Hall, Screen } from '../types';
 import { MALDIVES_ATOLLS, getIslandsByAtoll } from '../data/maldivesLocations';
 
@@ -20,6 +21,7 @@ export const AdminHubPage: React.FC = () => {
   const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
   const [isRegisterModalOpen, setIsRegisterModalOpen] = useState(false);
   const [isFreeTrialModalOpen, setIsFreeTrialModalOpen] = useState(false);
+  const [verificationSentEmail, setVerificationSentEmail] = useState<string | null>(null);
   const [selectedPlanForRegister, setSelectedPlanForRegister] = useState<'weekly' | 'monthly' | 'yearly' | 'one_month'>('monthly');
 
   // Free trial form state (free user with limitations + password credentials)
@@ -58,16 +60,18 @@ export const AdminHubPage: React.FC = () => {
     const allTenants = cinemaStore.getTenants();
     setTenants(allTenants);
 
-    const savedAuth = sessionStorage.getItem('mv_tenant_auth');
+    const savedAuth = getTenantSession();
     if (savedAuth) {
-      try {
-        const parsed = JSON.parse(savedAuth);
-        const matched = allTenants.find((t) => t.id === parsed.id || t.tenantCode === parsed.tenantCode);
-        if (matched) {
-          setCurrentSessionTenant(matched);
-        }
-      } catch {}
+      const matched = allTenants.find((t) => t.id === savedAuth.id || t.tenantCode === savedAuth.tenantCode);
+      if (matched) {
+        setCurrentSessionTenant(matched);
+      }
     }
+
+    const unsub = onTenantSessionChange((t) => {
+      setCurrentSessionTenant(t);
+    });
+    return () => unsub();
   }, []);
 
   const handleLogin = async (e?: React.FormEvent, customTenant?: Tenant) => {
@@ -75,7 +79,7 @@ export const AdminHubPage: React.FC = () => {
     setLoginError('');
 
     if (customTenant) {
-      sessionStorage.setItem('mv_tenant_auth', JSON.stringify(customTenant));
+      setTenantSession(customTenant);
       setCurrentSessionTenant(customTenant);
       setIsLoginModalOpen(false);
       navigate('/tenant-admin');
@@ -125,14 +129,14 @@ export const AdminHubPage: React.FC = () => {
       return;
     }
 
-    sessionStorage.setItem('mv_tenant_auth', JSON.stringify(found));
+    setTenantSession(found);
     setCurrentSessionTenant(found);
     setIsLoginModalOpen(false);
     navigate('/tenant-admin');
   };
 
   const handleLogout = () => {
-    sessionStorage.removeItem('mv_tenant_auth');
+    clearTenantSession();
     setCurrentSessionTenant(null);
     setLoginIdentifier('');
     setLoginPassword('');
@@ -172,20 +176,49 @@ export const AdminHubPage: React.FC = () => {
       return;
     }
 
+    const cleanEmail = trialOwnerEmail.trim().toLowerCase();
+
+    // Prevent duplicate registration with existing email
+    const allTenants = cinemaStore.getTenants();
+    const existing = allTenants.find((t) => t.ownerEmail.toLowerCase() === cleanEmail);
+    if (existing) {
+      setTrialFormError(`The email "${cleanEmail}" already has an account (${existing.name}). Each organizer can only create one free trial cinema. Please log in.`);
+      return;
+    }
+
+    const existingPending = cinemaStore.getTenantRequests().find(
+      (r) => r.status === 'pending' && r.contactEmail.toLowerCase() === cleanEmail
+    );
+    if (existingPending) {
+      setTrialFormError(`A cinema registration request for "${cleanEmail}" is already pending Super Admin approval.`);
+      return;
+    }
+
     setIsSubmittingTrial(true);
 
     // If Supabase Auth is configured, register the user account in Supabase
     if (isSupabaseConfigured()) {
       try {
-        const { error: sAuthErr } = await supabase.auth.signUp({
-          email: trialOwnerEmail.trim().toLowerCase(),
+        const { data: sData, error: sAuthErr } = await supabase.auth.signUp({
+          email: cleanEmail,
           password: trialPassword
         });
-        if (sAuthErr && !sAuthErr.message.toLowerCase().includes('already registered')) {
-          console.warn('Supabase auth notice:', sAuthErr.message);
+        if (sAuthErr) {
+          setTrialFormError(sAuthErr.message);
+          setIsSubmittingTrial(false);
+          return;
         }
-      } catch (err) {
-        console.warn('Supabase auth signup error:', err);
+
+        // If email confirmation is required, inform user
+        if (sData.user && (!sData.session || sData.user.identities?.length === 0)) {
+          setVerificationSentEmail(cleanEmail);
+          setIsSubmittingTrial(false);
+          return;
+        }
+      } catch (err: any) {
+        setTrialFormError(err.message || 'Authentication error.');
+        setIsSubmittingTrial(false);
+        return;
       }
     }
 
@@ -262,8 +295,8 @@ export const AdminHubPage: React.FC = () => {
     cinemaStore.saveHall(newHall);
     cinemaStore.saveScreen(newScreen);
 
-    // Save session & login immediately
-    sessionStorage.setItem('mv_tenant_auth', JSON.stringify(newTenant));
+    // Save session in shared localStorage & login immediately
+    setTenantSession(newTenant);
     setCurrentSessionTenant(newTenant);
     setIsFreeTrialModalOpen(false);
     setIsSubmittingTrial(false);
@@ -312,6 +345,16 @@ export const AdminHubPage: React.FC = () => {
 
     if (!regSlipUrl) {
       setRegFormError('Please attach your BML transfer slip receipt as proof of payment.');
+      return;
+    }
+
+    const cleanOwnerEmail = ownerEmail.trim().toLowerCase();
+
+    // Prevent duplicate registration with existing email
+    const allTenantsList = cinemaStore.getTenants();
+    const existingOrg = allTenantsList.find((t) => t.ownerEmail.toLowerCase() === cleanOwnerEmail);
+    if (existingOrg) {
+      setRegFormError(`The email "${cleanOwnerEmail}" already has an active cinema account ("${existingOrg.name}"). To add a second cinema to this email, please log in and purchase an Additional Cinema Slot.`);
       return;
     }
 
@@ -1387,7 +1430,43 @@ export const AdminHubPage: React.FC = () => {
               </p>
             </div>
 
-            {/* Free Tier Limitations Notice */}
+            {verificationSentEmail ? (
+              <div className="text-center py-6 space-y-4">
+                <div className="w-16 h-16 rounded-2xl bg-teal-500/10 border border-teal-500/30 text-teal-400 flex items-center justify-center mx-auto shadow-lg shadow-teal-500/10">
+                  <Mail className="w-8 h-8" />
+                </div>
+                <div className="space-y-1.5">
+                  <h3 className="text-xl font-bold text-white">Check Your Email to Verify</h3>
+                  <p className="text-xs text-slate-300 max-w-sm mx-auto leading-relaxed">
+                    We have sent an account confirmation email to <strong className="text-teal-300">{verificationSentEmail}</strong>. Please click the confirmation link in your inbox to verify your email.
+                  </p>
+                </div>
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 text-[11px] text-slate-400 space-y-2 text-left">
+                  <div className="font-semibold text-slate-200 flex items-center space-x-1.5">
+                    <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
+                    <span>Next Steps:</span>
+                  </div>
+                  <ol className="list-decimal pl-5 space-y-1 text-slate-400">
+                    <li>Open your email inbox and click <strong>"Confirm your email"</strong>.</li>
+                    <li>Return here and log in using your email and password.</li>
+                    <li>Your 3-day free trial cinema dashboard will be ready!</li>
+                  </ol>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setVerificationSentEmail(null);
+                    setIsFreeTrialModalOpen(false);
+                    setIsLoginModalOpen(true);
+                  }}
+                  className="w-full py-3 rounded-xl bg-teal-500 hover:bg-teal-400 text-slate-950 font-black text-xs transition"
+                >
+                  Go to Login →
+                </button>
+              </div>
+            ) : (
+              <>
+                {/* Free Tier Limitations Notice */}
             <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2">
               <div className="flex items-center space-x-2 text-amber-300 font-bold text-xs">
                 <AlertCircle className="w-4 h-4 shrink-0" />
@@ -1562,6 +1641,8 @@ export const AdminHubPage: React.FC = () => {
                 Random subdomain and initial Hall 1 / Screen 1 will be automatically seeded for your account.
               </p>
             </form>
+              </>
+            )}
           </div>
         </div>
       )}
