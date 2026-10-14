@@ -36,9 +36,16 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
     let cancelled = false;
 
     // Reads the (cloud-synced) store and pushes it into component state.
-    const refresh = () => {
+    const refresh = async () => {
       if (cancelled) return;
-      const found = cinemaStore.getTenantBySlug(tenantSlug);
+      let found = cinemaStore.getTenantBySlug(tenantSlug);
+      
+      // If not yet in local client cache, fetch directly from cloud
+      if (!found && cinemaStore.isCloudEnabled()) {
+        found = await cinemaStore.fetchTenantBySlug(tenantSlug);
+      }
+      if (cancelled) return;
+
       if (found) {
         setTenant(found);
         setHalls(cinemaStore.getHalls(found.id));
@@ -46,7 +53,13 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
         setMovies(cinemaStore.getMovies(found.id).filter((m) => m.published !== false));
         setShowtimes(cinemaStore.getShowtimes(found.id));
         // BANDWIDTH OPTIMIZATION: Narrow cloud query strictly to this cinema
-        cinemaStore.syncFromSupabase(found.id);
+        await cinemaStore.syncFromSupabase(found.id);
+        if (!cancelled) {
+          setHalls(cinemaStore.getHalls(found.id));
+          setScreens(cinemaStore.getScreens().filter((s) => s.tenantId === found.id));
+          setMovies(cinemaStore.getMovies(found.id).filter((m) => m.published !== false));
+          setShowtimes(cinemaStore.getShowtimes(found.id));
+        }
       } else {
         setTenant(null);
         setHalls([]);
@@ -54,9 +67,8 @@ export const TenantPortalPage: React.FC<TenantPortalProps> = ({ tenantSlugFromHo
         setMovies([]);
         setShowtimes([]);
       }
-      // Only stop the spinner once the first live cloud download has completed,
-      // so visitors never see stale cached shows or a false "not found".
-      if (cinemaStore.isReady()) setLoading(false);
+      // Stop spinner once cloud download has completed
+      if (cinemaStore.isReady() || found) setLoading(false);
     };
 
     refresh();

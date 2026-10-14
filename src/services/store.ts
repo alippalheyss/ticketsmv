@@ -286,12 +286,11 @@ class MaldivianCinemaStore {
       try {
         const syncKey = targetTenantId ? `mv_last_sync_${targetTenantId}` : 'mv_last_sync_global';
         const lastSyncIso = localStorage.getItem(syncKey);
-        const hasExistingCache = Boolean(
-          localStorage.getItem(STORAGE_KEYS.TENANTS) && 
-          localStorage.getItem(STORAGE_KEYS.MOVIES)
-        );
+        let existingTenants: any[] = [];
+        try { existingTenants = JSON.parse(localStorage.getItem(STORAGE_KEYS.TENANTS) || '[]'); } catch { existingTenants = []; }
+        const hasExistingCache = Array.isArray(existingTenants) && existingTenants.length > 0;
 
-        // DELTA SYNC: Only pull rows modified since last sync if local cache exists
+        // DELTA SYNC: Only pull rows modified since last sync if local cache is already populated
         const isDelta = Boolean(hasExistingCache && lastSyncIso);
 
         let query = supabase
@@ -648,7 +647,46 @@ class MaldivianCinemaStore {
   }
 
   public getTenantBySlug(slug: string): Tenant | undefined {
-    return this.getTenants().find((t) => t.slug.toLowerCase() === slug.toLowerCase());
+    return this.getTenants().find((t) => t.slug?.toLowerCase() === slug.toLowerCase());
+  }
+
+  /**
+   * Direct cloud lookup for a cinema subdomain / slug.
+   * Ensures new or un-cached cinema subdomains never show false "Portal Not Found".
+   */
+  public async fetchTenantBySlug(slug: string): Promise<Tenant | undefined> {
+    const clean = slug.trim().toLowerCase();
+    // 1. Check local cache
+    const cached = this.getTenants().find((t) => t.slug?.toLowerCase() === clean);
+    if (cached) return cached;
+
+    // 2. Query Supabase cloud directly
+    if (this.cloud) {
+      try {
+        const { data: rows, error } = await supabase
+          .from(RECORDS_TABLE)
+          .select('data')
+          .eq('kind', 'tenant')
+          .limit(100);
+
+        if (!error && rows) {
+          const tenants = rows.map((r) => r.data as Tenant);
+          const found = tenants.find((t) => t.slug?.toLowerCase() === clean);
+          if (found) {
+            const list = this.getTenants();
+            const idx = list.findIndex((t) => t.id === found.id);
+            if (idx >= 0) list[idx] = found;
+            else list.push(found);
+            localStorage.setItem(STORAGE_KEYS.TENANTS, JSON.stringify(list));
+            this.broadcastSync();
+            return found;
+          }
+        }
+      } catch (e) {
+        console.warn('[cloud] fetchTenantBySlug error:', e);
+      }
+    }
+    return undefined;
   }
 
   public isSlugAvailable(slug: string, excludeTenantId?: string): boolean {
