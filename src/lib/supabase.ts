@@ -6,23 +6,29 @@ export const DIRECT_SUPABASE_ANON_KEY =
   'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtuaWF6c3BwaGRoZGhjamZyb2t1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3Mzg0NDMsImV4cCI6MjEwNjMxNDQ0M30.s_iDSIVREIpQkAr-pGv27WTNElQnQvkoHDgIoYRcfH4';
 
 /**
- * Resolves the Supabase URL.
- * Automatically detects and clears misconfigured proxy URLs (such as api.cinemamv.online
- * when routing to Vercel instead of Cloudflare) to prevent locking users out of checkout
- * or admin pages with CORS errors.
+ * Universal Subdomain & Origin Resolver:
+ * Supports cinemamv.online and all existing & dynamically created subdomains (*.cinemamv.online).
+ * 
+ * 1. On subdomains, routes through same-origin /api/supabase/ which completely bypasses
+ *    browser cross-origin CORS preflight blocks.
+ * 2. Uses direct Supabase WebSockets for Realtime so live updates never fail.
  */
 const getInitialSupabaseUrl = (): string => {
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('mv_supabase_proxy_url');
-    // If user saved api.cinemamv.online, it currently resolves to Vercel (missing CORS headers & worker routing).
-    // Automatically purge it so checkout, tenant admin, and super admin work immediately!
+    // If user saved api.cinemamv.online without Cloudflare worker routing, purge it
     if (saved && (saved.includes('api.cinemamv.online') || !saved.startsWith('http'))) {
-      console.warn('[Supabase Config] Purged unrouted proxy URL from localStorage:', saved);
       localStorage.removeItem('mv_supabase_proxy_url');
-      return DIRECT_SUPABASE_URL;
-    }
-    if (saved && saved.trim().startsWith('http')) {
+    } else if (saved && saved.trim().startsWith('http')) {
       return saved.trim();
+    }
+
+    const host = window.location.hostname;
+    // For cinemamv.online, all cinema subdomains (*.cinemamv.online), and localhost:
+    // Route via same-origin /api/supabase/ proxy rewritten by Vercel & Cloudflare Pages.
+    // This guarantees that any new tenant cinema subdomain works instantly with ZERO CORS errors!
+    if (host.endsWith('cinemamv.online') || host === 'localhost' || host.endsWith('.localhost')) {
+      return `${window.location.origin}/api/supabase/`;
     }
   }
 
@@ -48,5 +54,26 @@ export const isSupabaseConfigured = () => {
   );
 };
 
-export const supabase = createClient(supabaseUrl, supabaseKey);
+/**
+ * Custom WebSocket Transport that guarantees Supabase Realtime always connects
+ * to the direct Supabase websocket cluster (wss://kniazspphdhdhcjfroku.supabase.co),
+ * regardless of proxy rewrites or subdomains.
+ */
+const DirectRealtimeWebSocket = typeof window !== 'undefined' && window.WebSocket
+  ? class extends WebSocket {
+      constructor(url: string | URL, protocols?: string | string[]) {
+        const urlStr = String(url);
+        const directWsUrl = urlStr.replace(
+          /^wss?:\/\/[^\/]+(\/api\/supabase)?/,
+          'wss://kniazspphdhdhcjfroku.supabase.co'
+        );
+        super(directWsUrl, protocols);
+      }
+    }
+  : undefined;
 
+export const supabase = createClient(supabaseUrl, supabaseKey, {
+  realtime: {
+    transport: DirectRealtimeWebSocket as any,
+  },
+});
