@@ -16,17 +16,23 @@ export const DIRECT_SUPABASE_ANON_KEY =
 const getInitialSupabaseUrl = (): string => {
   if (typeof window !== 'undefined') {
     const saved = localStorage.getItem('mv_supabase_proxy_url');
-    // If user saved api.cinemamv.online without Cloudflare worker routing, purge it
-    if (saved && (saved.includes('api.cinemamv.online') || !saved.startsWith('http'))) {
-      localStorage.removeItem('mv_supabase_proxy_url');
-    } else if (saved && saved.trim().startsWith('http')) {
+    // If user explicitly saved a custom proxy URL (like a .workers.dev URL or custom domain)
+    if (saved && saved.startsWith('http')) {
       return saved.trim();
+    }
+
+    // If user cleared it or explicitly set to 'direct', use same-origin proxy or direct Supabase
+    if (saved === 'direct') {
+      const host = window.location.hostname;
+      if (host.endsWith('cinemamv.online') || host === 'localhost' || host.endsWith('.localhost')) {
+        return `${window.location.origin}/api/supabase/`;
+      }
+      return DIRECT_SUPABASE_URL;
     }
 
     const host = window.location.hostname;
     // For cinemamv.online, all cinema subdomains (*.cinemamv.online), and localhost:
     // Route via same-origin /api/supabase/ proxy rewritten by Vercel & Cloudflare Pages.
-    // This guarantees that any new tenant cinema subdomain works instantly with ZERO CORS errors!
     if (host.endsWith('cinemamv.online') || host === 'localhost' || host.endsWith('.localhost')) {
       return `${window.location.origin}/api/supabase/`;
     }

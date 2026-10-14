@@ -35,7 +35,14 @@ export const SuperAdminPage: React.FC = () => {
 
   // Cloudflare Edge Proxy state
   const [proxyUrlInput, setProxyUrlInput] = useState<string>(() => {
-    return localStorage.getItem('mv_supabase_proxy_url') || import.meta.env.VITE_SUPABASE_PROXY_URL || '';
+    const saved = localStorage.getItem('mv_supabase_proxy_url');
+    if (saved === 'direct') return '';
+    if (saved && saved.startsWith('http')) return saved;
+    const envProxy = import.meta.env.VITE_SUPABASE_PROXY_URL;
+    if (envProxy && !envProxy.includes('api.cinemamv.online') && envProxy.startsWith('http')) {
+      return envProxy;
+    }
+    return '';
   });
   const [proxyTestStatus, setProxyTestStatus] = useState<{
     testing: boolean;
@@ -96,7 +103,7 @@ export const SuperAdminPage: React.FC = () => {
       localStorage.setItem('mv_supabase_proxy_url', url);
       alert(`Cloudflare Proxy URL saved: ${url}\nRequests will now route through Cloudflare Edge Caching.`);
     } else {
-      localStorage.removeItem('mv_supabase_proxy_url');
+      localStorage.setItem('mv_supabase_proxy_url', 'direct');
       alert('Cloudflare Proxy removed. System will connect to Supabase directly.');
     }
     window.location.reload();
@@ -772,7 +779,7 @@ export const SuperAdminPage: React.FC = () => {
                 type="button"
                 onClick={() => {
                   setProxyUrlInput('');
-                  localStorage.removeItem('mv_supabase_proxy_url');
+                  localStorage.setItem('mv_supabase_proxy_url', 'direct');
                   alert('Proxy cleared! System is now connected directly to Supabase cloud.');
                   window.location.reload();
                 }}
@@ -800,7 +807,7 @@ export const SuperAdminPage: React.FC = () => {
                   type="button"
                   onClick={() => {
                     setProxyUrlInput('');
-                    localStorage.removeItem('mv_supabase_proxy_url');
+                    localStorage.setItem('mv_supabase_proxy_url', 'direct');
                     alert('Cleared proxy. System will connect to Supabase directly.');
                     window.location.reload();
                   }}
