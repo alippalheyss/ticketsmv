@@ -25,7 +25,7 @@ export const CheckoutPage: React.FC = () => {
   // Guest Input State
   const [guestName, setGuestName] = useState('');
   const [guestEmail, setGuestEmail] = useState('');
-  const [guestPhone, setGuestPhone] = useState('+960 ');
+  const [guestPhone, setGuestPhone] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('bml_transfer');
   const [slipFile, setSlipFile] = useState<string | null>(null);
   const [slipPreview, setSlipPreview] = useState<string | null>(null);
@@ -115,10 +115,39 @@ export const CheckoutPage: React.FC = () => {
     }
   };
 
-  // Maldivian phone validation: +960 followed by 7-digit mobile (starting with 7 or 9)
-  const validateMaldivianPhone = (phone: string) => {
-    const cleaned = phone.replace(/\s+/g, '').replace('-', '');
-    return cleaned.length >= 10;
+  // Maldivian Mobile Phone Parser & Validator
+  // Rule: Must be exactly 7 digits and must start with 7 or 9 (e.g. 7xxxxxx or 9xxxxxx)
+  const parseMaldivianMobile = (raw: string) => {
+    let digits = raw.replace(/\D/g, '');
+    if (digits.startsWith('960') && digits.length >= 10) {
+      digits = digits.slice(3);
+    }
+
+    if (!digits) {
+      return { isValid: false, local: '', full: '', errorMessage: 'Please enter your 7-digit Maldivian mobile number.' };
+    }
+    if (!/^[79]/.test(digits)) {
+      return { 
+        isValid: false, 
+        local: digits, 
+        full: '', 
+        errorMessage: 'Maldivian mobile number must start with 7 or 9 (e.g., 7xxxxxx or 9xxxxxx).' 
+      };
+    }
+    if (digits.length !== 7) {
+      return { 
+        isValid: false, 
+        local: digits, 
+        full: '', 
+        errorMessage: `Mobile number must be exactly 7 digits (currently entered ${digits.length} of 7 digits).` 
+      };
+    }
+    return {
+      isValid: true,
+      local: digits,
+      full: `+960 ${digits}`,
+      errorMessage: ''
+    };
   };
 
   const handleConfirmBooking = async (e: React.FormEvent) => {
@@ -130,13 +159,25 @@ export const CheckoutPage: React.FC = () => {
       return;
     }
 
-    if (!guestEmail.includes('@') || !guestEmail.includes('.')) {
-      setFormError('Please provide a valid email address for receiving your digital ticket.');
+    const trimmedEmail = guestEmail.trim();
+    if (!trimmedEmail) {
+      setFormError('Please enter your email address for receiving your digital ticket.');
       return;
     }
 
-    if (!validateMaldivianPhone(guestPhone)) {
-      setFormError('Please enter a valid Maldivian phone number (e.g., +960 7xxxxxx or 9xxxxxx).');
+    if (!trimmedEmail.includes('@')) {
+      setFormError("Email address must include an '@' symbol (e.g., name@gmail.com).");
+      return;
+    }
+
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedEmail)) {
+      setFormError('Please provide a complete and valid email address (e.g., name@gmail.com).');
+      return;
+    }
+
+    const mobileCheck = parseMaldivianMobile(guestPhone);
+    if (!mobileCheck.isValid) {
+      setFormError(mobileCheck.errorMessage);
       return;
     }
 
@@ -165,9 +206,9 @@ export const CheckoutPage: React.FC = () => {
       bookingRef,
       showtimeId: showtime.id,
       tenantId: showtime.tenantId,
-      guestName,
-      guestEmail,
-      guestPhone,
+      guestName: guestName.trim(),
+      guestEmail: trimmedEmail,
+      guestPhone: mobileCheck.full,
       seats: selectedSeats,
       totalAmount: totalPrice,
       paymentMethod,
@@ -248,9 +289,18 @@ export const CheckoutPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                  {t('checkout.email')} *
-                </label>
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-300">
+                    {t('checkout.email')} <span className="text-teal-400">*</span>
+                  </label>
+                  {guestEmail.length > 0 && (
+                    <span className={`text-[11px] font-semibold ${guestEmail.includes('@') && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim()) ? 'text-teal-400' : 'text-amber-400'}`}>
+                      {guestEmail.includes('@') ? (
+                        /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(guestEmail.trim()) ? '✓ Valid email' : 'Add domain (.com)'
+                      ) : "Must contain '@'"}
+                    </span>
+                  )}
+                </div>
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
                   <input
@@ -268,22 +318,48 @@ export const CheckoutPage: React.FC = () => {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-400 mb-1.5">
-                  {t('checkout.phone')} *
-                </label>
-                <div className="relative">
-                  <Phone className="w-4 h-4 text-slate-500 absolute left-3.5 top-3" />
+                <div className="flex items-center justify-between mb-1.5">
+                  <label className="text-xs font-semibold text-slate-300">
+                    {t('checkout.phone')} <span className="text-teal-400">*</span>
+                  </label>
+                  {guestPhone.length > 0 && (() => {
+                    const st = parseMaldivianMobile(guestPhone);
+                    return (
+                      <span className={`text-[11px] font-mono font-semibold ${st.isValid ? 'text-teal-400' : 'text-amber-400'}`}>
+                        {st.isValid ? (
+                          `✓ Valid (+960 ${st.local})`
+                        ) : (
+                          !/^[79]/.test(st.local) ? 'Must start with 7 or 9' : `${st.local.length}/7 digits`
+                        )}
+                      </span>
+                    );
+                  })()}
+                </div>
+                <div className="relative flex items-center">
+                  <div className="absolute left-3 flex items-center space-x-1.5 text-slate-400 select-none pointer-events-none font-mono text-xs">
+                    <Phone className="w-3.5 h-3.5 text-slate-500" />
+                    <span className="font-bold text-teal-400 bg-teal-500/10 px-1.5 py-0.5 rounded border border-teal-500/30">+960</span>
+                    <span className="text-slate-600">|</span>
+                  </div>
                   <input
                     type="tel"
                     required
+                    maxLength={10}
                     value={guestPhone}
-                    onChange={(e) => setGuestPhone(e.target.value)}
-                    placeholder="+960 7914421"
-                    className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-sm focus:outline-none focus:border-teal-400"
+                    onChange={(e) => {
+                      const raw = e.target.value.replace(/\D/g, '');
+                      if (raw.startsWith('960') && raw.length > 3) {
+                        setGuestPhone(raw.slice(3, 10));
+                      } else {
+                        setGuestPhone(raw.slice(0, 7));
+                      }
+                    }}
+                    placeholder="7xxxxxx or 9xxxxxx (7 digits)"
+                    className="w-full pl-24 pr-3 py-2.5 rounded-xl bg-slate-900 border border-slate-700 text-white font-mono text-sm tracking-wider focus:outline-none focus:border-teal-400"
                   />
                 </div>
                 <span className="text-[10px] text-slate-500 mt-1 block">
-                  Used for instant SMS / Viber notifications and gatekeeper verification.
+                  Maldivian mobile number must be exactly 7 digits starting with 7 or 9.
                 </span>
               </div>
             </div>

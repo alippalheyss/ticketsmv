@@ -55,7 +55,7 @@ export const SuperAdminPage: React.FC = () => {
       const testEndpoint = `${cleanUrl}/rest/v1/cinema_records?select=kind&limit=1`;
       const res = await fetch(testEndpoint, {
         headers: {
-          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || 'placeholder-anon-key'
+          'apikey': import.meta.env.VITE_SUPABASE_ANON_KEY || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtuaWF6c3BwaGRoZGhjamZyb2t1Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3OTA3Mzg0NDMsImV4cCI6MjEwNjMxNDQ0M30.s_iDSIVREIpQkAr-pGv27WTNElQnQvkoHDgIoYRcfH4'
         }
       });
       if (res.ok) {
@@ -73,6 +73,15 @@ export const SuperAdminPage: React.FC = () => {
         });
       }
     } catch (err: any) {
+      const cleanUrl = url.replace(/\/$/, '');
+      if (cleanUrl.includes('api.cinemamv.online')) {
+        setProxyTestStatus({
+          testing: false,
+          success: false,
+          message: `CORS / Preflight Error: api.cinemamv.online is currently routing to Vercel instead of your Cloudflare Worker! In Cloudflare Dashboard -> Workers & Pages -> supabase-cinema-proxy -> Settings -> Domains & Routes -> Add Custom Domain: api.cinemamv.online. Until you configure that route, please click 'Reset to Direct Supabase' so the entire site runs without errors.`
+        });
+        return;
+      }
       setProxyTestStatus({
         testing: false,
         success: false,
@@ -744,6 +753,36 @@ export const SuperAdminPage: React.FC = () => {
         </div>
 
         <div className="space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 p-3 rounded-xl bg-slate-900/80 border border-slate-800">
+            <div className="flex items-center space-x-2">
+              <span className={`w-2.5 h-2.5 rounded-full ${!proxyUrlInput ? 'bg-emerald-400 animate-pulse' : 'bg-cyan-400'}`} />
+              <div className="text-xs">
+                <span className="font-bold text-white">
+                  {!proxyUrlInput ? 'Connected Directly to Supabase Cloud' : 'Routing via Custom Proxy URL'}
+                </span>
+                <span className="block text-[11px] text-slate-400">
+                  {!proxyUrlInput 
+                    ? 'Default mode: Realtime WebSockets active, zero preflight CORS errors.' 
+                    : `Active endpoint: ${proxyUrlInput}`}
+                </span>
+              </div>
+            </div>
+            {proxyUrlInput && (
+              <button
+                type="button"
+                onClick={() => {
+                  setProxyUrlInput('');
+                  localStorage.removeItem('mv_supabase_proxy_url');
+                  alert('Proxy cleared! System is now connected directly to Supabase cloud.');
+                  window.location.reload();
+                }}
+                className="px-3 py-1.5 rounded-lg bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 border border-emerald-500/40 text-xs font-bold transition flex items-center space-x-1"
+              >
+                <span>Reset to Direct Supabase</span>
+              </button>
+            )}
+          </div>
+
           <div>
             <label className="block text-xs font-semibold text-slate-300 mb-1">
               Cloudflare Worker Proxy URL or Custom Domain
@@ -753,7 +792,7 @@ export const SuperAdminPage: React.FC = () => {
                 type="url"
                 value={proxyUrlInput}
                 onChange={(e) => setProxyUrlInput(e.target.value)}
-                placeholder="e.g. https://api.cinemamv.online or https://supabase-cinema-proxy.yourname.workers.dev"
+                placeholder="e.g. https://supabase-cinema-proxy.yourname.workers.dev"
                 className="flex-1 px-3 py-2 rounded-xl bg-slate-900 border border-slate-700 text-teal-300 font-mono text-xs focus:border-teal-400 focus:outline-none"
               />
               {proxyUrlInput && (
@@ -767,12 +806,12 @@ export const SuperAdminPage: React.FC = () => {
                   }}
                   className="px-3 py-2 rounded-xl bg-slate-800 hover:bg-rose-950/60 text-slate-400 hover:text-rose-400 text-xs font-semibold border border-slate-700 transition"
                 >
-                  Reset
+                  Clear
                 </button>
               )}
             </div>
             <p className="text-[11px] text-slate-400 mt-1">
-              Tip: Paste your Cloudflare Worker URL (e.g. from Cloudflare Workers & Pages) or custom domain (<code className="text-teal-300">https://api.cinemamv.online</code>).
+              Note: To use <code className="text-teal-300">https://api.cinemamv.online</code>, you must attach it as a <strong>Custom Domain</strong> in your Cloudflare Worker settings (Settings → Domains & Routes). Otherwise, requests hit Vercel and fail CORS.
             </p>
           </div>
 

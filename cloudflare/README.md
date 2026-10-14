@@ -23,17 +23,20 @@ This integration reduces your **Supabase Database Egress by 90-95%** and permane
 2. Replace all the existing code with the contents of [`cloudflare/worker.js`](./worker.js).
 3. Click **Deploy**.
 
-### Step 3: Add a Custom Domain (or Route)
-1. In your worker dashboard, go to the **Settings** tab → **Triggers** (or **Domains & Routes**).
-2. Click **Add Custom Domain** (e.g. `api.cinemamv.online`).
-3. Cloudflare will automatically configure the DNS record and SSL certificate within seconds!
+### Step 3: Add a Custom Domain (CRITICAL STEP)
+1. In your worker dashboard, go to the **Settings** tab → **Domains & Routes** (or **Triggers**).
+2. Click **Add** → **Custom Domain**.
+3. Type: `api.cinemamv.online` and click **Add Custom Domain**.
+4. Cloudflare will automatically intercept `api.cinemamv.online` and route all requests through this Worker with full CORS headers.
 
-### Step 4: Configure the App
-In your deployment environment or `.env` file, set:
-```env
-VITE_SUPABASE_PROXY_URL=https://api.cinemamv.online
-```
-*(If left unset, the app will continue talking directly to Supabase as normal).*
+> [!WARNING]
+> If you skip adding `api.cinemamv.online` under Custom Domains in the Worker settings, DNS will route `api.cinemamv.online` to Vercel (due to your wildcard `*.cinemamv.online` record). Vercel does not support Supabase REST API requests, leading to CORS errors and 0 requests in your Cloudflare metrics!
+
+---
+
+## Why were Cloudflare Worker metrics showing 0?
+Because `api.cinemamv.online` was resolving to Vercel's IP address (`64.29.17.65` / `216.198.79.65`) instead of Cloudflare Workers.
+When you attach `api.cinemamv.online` as a **Custom Domain** directly in the Worker's **Settings → Domains & Routes**, Cloudflare overrides DNS to ensure traffic hits your Worker, causing Cloudflare metrics to rise and all CORS errors to disappear.
 
 ---
 
@@ -43,3 +46,4 @@ If you prefer deploying from your terminal:
 cd cloudflare
 npx wrangler deploy
 ```
+
