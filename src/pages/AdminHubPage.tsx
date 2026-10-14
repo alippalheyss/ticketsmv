@@ -1480,30 +1480,39 @@ export const AdminHubPage: React.FC = () => {
               </div>
             ) : (
               <>
-                {/* Free Tier Limitations Notice */}
-            <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/30 space-y-2">
-              <div className="flex items-center space-x-2 text-amber-300 font-bold text-xs">
-                <AlertCircle className="w-4 h-4 shrink-0" />
-                <span>Free Trial Features & Limitations:</span>
-              </div>
-              <ul className="text-[11px] text-slate-300 space-y-1.5 pl-5 list-disc leading-relaxed">
-                <li>
-                  <strong className="text-white">Random Subdomain Only:</strong> Free accounts are assigned a system-generated random domain (e.g. <span className="font-mono text-amber-300">hall-XXX.cinemamv.online</span>). Custom branded subdomains require a Paid Plan.
-                </li>
-                <li>
-                  <strong className="text-white">1 Hall & 1 Screen Limit:</strong> Setup 1 cinema hall and 1 screen. Multi-screen setups (Screen 1, 2, 3 in shared halls) are available on Paid Plans.
-                </li>
-                <li>
-                  <strong className="text-white">Full Access to 100 Seats:</strong> Free tier includes full interactive seat layout for up to 100 seats. Unlimited capacity and multiple screens are unlocked on Paid Plans.
-                </li>
-                <li>
-                  <strong className="text-white">Standard Bank Slip Uploads:</strong> Payment gateway and custom bank logos are paid features.
-                </li>
-                <li>
-                  <strong className="text-white">3 Days Full Sandbox:</strong> Upgrade anytime from MVR 149 with zero long-term contracts.
-                </li>
-              </ul>
-            </div>
+                {/* Free Trial Highlights */}
+                <div className="p-3.5 rounded-2xl bg-teal-500/10 border border-teal-500/20 space-y-2.5">
+                  <div className="flex items-center space-x-2 text-teal-300 font-bold text-xs">
+                    <Sparkles className="w-4 h-4 shrink-0 text-teal-400" />
+                    <span>3-Day Free Trial Includes:</span>
+                  </div>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-[11px] text-slate-300">
+                    <div className="flex items-center space-x-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>3 Days full sandbox access</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>1 Cinema Hall & Screen layout</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>Interactive seat map (100 seats)</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>BML transfer slip verification</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>Door QR ticket validator</span>
+                    </div>
+                    <div className="flex items-center space-x-2">
+                      <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400 shrink-0" />
+                      <span>No credit card required</span>
+                    </div>
+                  </div>
+                </div>
 
             {/* Form Error */}
             {trialFormError && (
